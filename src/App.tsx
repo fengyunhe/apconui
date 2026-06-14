@@ -1,15 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
-type Tab = "containers" | "images" | "volumes" | "networks" | "machines";
+type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal";
 
 interface RawContainer {
   configuration: {
     id: string;
     image: { reference: string };
     platform: { os: string; architecture: string };
+    publishedPorts: Array<{ proto?: string; hostPort?: number; containerPort?: number }>;
+    initProcess: { arguments?: string[] };
+    resources: { cpus?: number; memoryInBytes?: number };
+    creationDate?: string;
+    labels?: Record<string, string>;
+    stopSignal?: string;
   };
   status: {
     state: string;
@@ -20,10 +26,16 @@ interface RawContainer {
 interface Container {
   id: string;
   image: string;
+  command: string;
   os: string;
   arch: string;
   state: string;
   ip: string;
+  ports: string;
+  cpus: number;
+  memoryBytes: number;
+  created: string;
+  labels: Record<string, string>;
   stats?: ContainerStats;
 }
 
@@ -121,13 +133,25 @@ function mapContainers(raw: RawContainer[]): Container[] {
   return raw.map((c) => {
     const ref = c.configuration.image?.reference || "";
     const ip = c.status.networks?.[0]?.ipv4Address?.split("/")[0] || "";
+    const args = c.configuration.initProcess?.arguments || [];
+    const command = args.length > 0 ? args.join(" ") : "";
+    const ports = (c.configuration.publishedPorts || []).map(p => {
+      const proto = p.proto ? `/${p.proto}` : "";
+      return p.hostPort && p.containerPort ? `${p.hostPort}:${p.containerPort}${proto}` : "";
+    }).filter(Boolean).join(", ");
     return {
       id: c.configuration.id || "",
       image: ref,
+      command,
       os: c.configuration.platform?.os || "",
       arch: c.configuration.platform?.architecture || "",
       state: c.status.state || "unknown",
       ip,
+      ports,
+      cpus: c.configuration.resources?.cpus || 0,
+      memoryBytes: c.configuration.resources?.memoryInBytes || 0,
+      created: c.configuration.creationDate?.split("T")[0] || "",
+      labels: c.configuration.labels || {},
     };
   });
 }
@@ -196,6 +220,8 @@ function App() {
   const [networks, setNetworks] = useState<Network[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<string>("unknown");
+
   const [showRunModal, setShowRunModal] = useState(false);
   const [showBuildModal, setShowBuildModal] = useState(false);
   const [showCreateVolumeModal, setShowCreateVolumeModal] = useState(false);
@@ -208,6 +234,24 @@ function App() {
   const [inspectData, setInspectData] = useState("");
   const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; message: string; onConfirm: () => void }>({ show: false, message: "", onConfirm: () => {} });
+
+  const [showVolumeInspectModal, setShowVolumeInspectModal] = useState(false);
+  const [volumeInspectData, setVolumeInspectData] = useState("");
+  const [selectedVolume, setSelectedVolume] = useState<Volume | null>(null);
+  const [showNetworkInspectModal, setShowNetworkInspectModal] = useState(false);
+  const [networkInspectData, setNetworkInspectData] = useState("");
+  const [selectedNetwork, setSelectedNetwork] = useState<Network | null>(null);
+
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [tagImageSource, setTagImageSource] = useState("");
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [pushImageRef, setPushImageRef] = useState("");
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [logsContainerId, setLogsContainerId] = useState("");
+  const [detailView, setDetailView] = useState<"container" | "image" | null>(null);
+  const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const imageExposedPortsCache = useRef<Map<string, string>>(new Map());
 
   const confirm = useCallback((message: string): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -240,6 +284,48 @@ function App() {
             stats: statsMap.get(c.id),
           }));
         }
+
+        const uniqueImages = [...new Set(parsed.map(c => c.image))];
+        for (const imgRef of uniqueImages) {
+          if (!imageExposedPortsCache.current.has(imgRef)) {
+            try {
+              const imgResult = await invoke<CommandResult>("inspect_image", { name: imgRef });
+              if (imgResult.success && imgResult.stdout.trim()) {
+                const imgData = JSON.parse(imgResult.stdout);
+                const imgObj = Array.isArray(imgData) ? imgData[0] : imgData;
+                const variants = imgObj?.variants || [];
+                let exposedPorts: string[] = [];
+                for (const v of variants) {
+                  const history = v?.config?.history || [];
+                  for (const h of history) {
+                    const cb = (h as Record<string, unknown>).created_by as string || "";
+                    const match = cb.match(/EXPOSE\s+(.+?)(?:\s+#|$)/);
+                    if (match) {
+                      const portStr = match[1];
+                      const portMatches = portStr.match(/(\d+\/\w+)/g);
+                      if (portMatches) {
+                        exposedPorts = portMatches;
+                        break;
+                      }
+                    }
+                  }
+                  if (exposedPorts.length > 0) break;
+                }
+                imageExposedPortsCache.current.set(imgRef, exposedPorts.join(", "));
+              }
+            } catch {
+              imageExposedPortsCache.current.set(imgRef, "");
+            }
+          }
+        }
+
+        parsed = parsed.map(c => {
+          const exposed = imageExposedPortsCache.current.get(c.image) || "";
+          return {
+            ...c,
+            ports: c.ports || exposed || "",
+          };
+        });
 
         setContainers(parsed);
       } else {
@@ -326,6 +412,25 @@ function App() {
     const interval = setInterval(refreshAll, 5000);
     return () => clearInterval(interval);
   }, [refreshAll]);
+
+  const handleCheckSystemStatus = useCallback(async () => {
+    try {
+      const result = await invoke<CommandResult>("run_raw_command", { command: "system status" });
+      if (result.success && result.stdout.toLowerCase().includes("running")) {
+        setSystemStatus("running");
+      } else {
+        setSystemStatus("stopped");
+      }
+    } catch {
+      setSystemStatus("unknown");
+    }
+  }, []);
+
+  useEffect(() => {
+    handleCheckSystemStatus();
+    const interval = setInterval(handleCheckSystemStatus, 10000);
+    return () => clearInterval(interval);
+  }, [handleCheckSystemStatus]);
 
   const handleContainerAction = async (action: string, id: string) => {
     const label = id.substring(0, 12);
@@ -479,16 +584,8 @@ function App() {
   };
 
   const handleLogs = async (id: string) => {
-    try {
-      const result = await invoke<CommandResult>("open_container_logs", { id });
-      if (result.success) {
-        showToast("success", "Logs opened in Terminal");
-      } else {
-        showToast("error", result.stderr);
-      }
-    } catch (e) {
-      showToast("error", String(e));
-    }
+    setLogsContainerId(id);
+    setShowLogsModal(true);
   };
 
   const handleInspect = async (id: string) => {
@@ -527,12 +624,177 @@ function App() {
     }
   };
 
+  const showContainerDetail = async (id: string) => {
+    setDetailLoading(true);
+    setDetailView("container");
+    try {
+      const result = await invoke<CommandResult>("inspect_container", { id });
+      if (result.success) {
+        try {
+          const parsed = JSON.parse(result.stdout);
+          setDetailData(Array.isArray(parsed) ? parsed[0] : parsed);
+        } catch {
+          setDetailData(null);
+        }
+      } else {
+        showToast("error", result.stderr);
+        setDetailView(null);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+      setDetailView(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const showImageDetail = async (fullName: string) => {
+    setDetailLoading(true);
+    setDetailView("image");
+    try {
+      const result = await invoke<CommandResult>("inspect_image", { name: fullName });
+      if (result.success) {
+        try {
+          const parsed = JSON.parse(result.stdout);
+          setDetailData(Array.isArray(parsed) ? parsed[0] : parsed);
+        } catch {
+          setDetailData(null);
+        }
+      } else {
+        showToast("error", result.stderr);
+        setDetailView(null);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+      setDetailView(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleVolumeInspect = async (name: string) => {
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("inspect_volume", { name });
+      if (result.success) {
+        try {
+          setVolumeInspectData(JSON.stringify(JSON.parse(result.stdout), null, 2));
+        } catch {
+          setVolumeInspectData(result.stdout);
+        }
+        setSelectedVolume(volumes.find(v => v.name === name) || null);
+        setShowVolumeInspectModal(true);
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNetworkInspect = async (name: string) => {
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("inspect_network", { name });
+      if (result.success) {
+        try {
+          setNetworkInspectData(JSON.stringify(JSON.parse(result.stdout), null, 2));
+        } catch {
+          setNetworkInspectData(result.stdout);
+        }
+        setSelectedNetwork(networks.find(n => n.name === name) || null);
+        setShowNetworkInspectModal(true);
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePruneContainers = async () => {
+    if (!await confirm("Prune all stopped containers? This cannot be undone.")) return;
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("prune_containers");
+      if (result.success) {
+        showToast("success", "Containers pruned");
+        refreshContainers();
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePruneImages = async () => {
+    if (!await confirm("Prune all unused images? This cannot be undone.")) return;
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("prune_images", { all: true });
+      if (result.success) {
+        showToast("success", "Images pruned");
+        refreshImages();
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePruneVolumes = async () => {
+    if (!await confirm("Prune all unused volumes? This cannot be undone.")) return;
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("prune_volumes");
+      if (result.success) {
+        showToast("success", "Volumes pruned");
+        refreshVolumes();
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePruneNetworks = async () => {
+    if (!await confirm("Prune all unused networks? This cannot be undone.")) return;
+    setLoading(true);
+    try {
+      const result = await invoke<CommandResult>("prune_networks");
+      if (result.success) {
+        showToast("success", "Networks pruned");
+        refreshNetworks();
+      } else {
+        showToast("error", result.stderr);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSystemStart = async () => {
     setLoading(true);
     try {
       const result = await invoke<CommandResult>("system_start");
       if (result.success) {
         showToast("success", "System started");
+        handleCheckSystemStatus();
       } else {
         showToast("error", result.stderr);
       }
@@ -550,6 +812,7 @@ function App() {
       const result = await invoke<CommandResult>("system_stop");
       if (result.success) {
         showToast("success", "System stopped");
+        handleCheckSystemStatus();
       } else {
         showToast("error", result.stderr);
       }
@@ -621,11 +884,21 @@ function App() {
             <span>Machines</span>
             <span className="badge">{machines.length}</span>
           </button>
+          <button className={`nav-item ${activeTab === "terminal" ? "active" : ""}`} onClick={() => setActiveTab("terminal")}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="4 17 10 11 4 5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+            <span>Terminal</span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
           <div className="system-controls">
-            <span className="system-label">Service</span>
+            <div className="system-status-row">
+              <span className="system-label">Service</span>
+              <span className={`status-dot status-dot-${systemStatus}`} title={systemStatus}></span>
+            </div>
             <div className="system-buttons">
               <button className="btn btn-sm btn-success" onClick={handleSystemStart} disabled={loading}>
                 Start
@@ -652,6 +925,8 @@ function App() {
             onLogs={handleLogs}
             onInspect={handleInspect}
             onExec={handleExec}
+            onPrune={handlePruneContainers}
+            onRowClick={showContainerDetail}
           />
         )}
 
@@ -679,7 +954,11 @@ function App() {
                 setLoading(false);
               }
             }}
+            onTag={(name) => { setTagImageSource(name); setShowTagModal(true); }}
+            onPush={(name) => { setPushImageRef(name); setShowPushModal(true); }}
             containers={containers}
+            onPrune={handlePruneImages}
+            onRowClick={showImageDetail}
           />
         )}
 
@@ -690,6 +969,8 @@ function App() {
             onRefresh={refreshVolumes}
             onCreate={() => setShowCreateVolumeModal(true)}
             onDelete={(name) => handleVolumeAction("delete", name)}
+            onInspect={handleVolumeInspect}
+            onPrune={handlePruneVolumes}
           />
         )}
 
@@ -700,6 +981,8 @@ function App() {
             onRefresh={refreshNetworks}
             onCreate={() => setShowCreateNetworkModal(true)}
             onDelete={(name) => handleNetworkAction("delete", name)}
+            onInspect={handleNetworkInspect}
+            onPrune={handlePruneNetworks}
           />
         )}
 
@@ -713,8 +996,26 @@ function App() {
             onStop={(name) => handleMachineAction("stop", name)}
             onDelete={(name) => handleMachineAction("delete", name)}
             onInspect={(name) => handleMachineAction("inspect", name)}
+            onSetDefault={async (name) => {
+              setLoading(true);
+              try {
+                const result = await invoke<CommandResult>("set_default_machine", { name });
+                if (result.success) {
+                  showToast("success", `Default machine set to ${name}`);
+                  refreshMachines();
+                } else {
+                  showToast("error", result.stderr);
+                }
+              } catch (e) {
+                showToast("error", String(e));
+              } finally {
+                setLoading(false);
+              }
+            }}
           />
         )}
+
+        {activeTab === "terminal" && <TerminalTab />}
       </main>
 
       {showRunModal && (
@@ -787,13 +1088,60 @@ function App() {
         />
       )}
 
+      {showTagModal && (
+        <TagImageModal
+          source={tagImageSource}
+          onClose={() => setShowTagModal(false)}
+          onTag={async (source, target) => {
+            setLoading(true);
+            try {
+              const result = await invoke<CommandResult>("tag_image", { source, target });
+              if (result.success) {
+                showToast("success", "Image tagged");
+                setShowTagModal(false);
+                refreshImages();
+              } else {
+                showToast("error", result.stderr);
+              }
+            } catch (e) {
+              showToast("error", String(e));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
+      {showPushModal && (
+        <PushImageModal
+          reference={pushImageRef}
+          onClose={() => setShowPushModal(false)}
+          onPush={async (reference) => {
+            setLoading(true);
+            try {
+              const result = await invoke<CommandResult>("push_image", { reference });
+              if (result.success) {
+                showToast("success", "Image pushed");
+                setShowPushModal(false);
+              } else {
+                showToast("error", result.stderr);
+              }
+            } catch (e) {
+              showToast("error", String(e));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
       {showCreateVolumeModal && (
         <CreateVolumeModal
           onClose={() => setShowCreateVolumeModal(false)}
           onCreate={async (name, size) => {
             setLoading(true);
             try {
-              const result = await invoke<CommandResult>("create_volume", { name, size: size || null });
+              const result = await invoke<CommandResult>("create_volume", { name, size: size || null, labels: null, opts: null });
               if (result.success) {
                 showToast("success", "Volume created");
                 setShowCreateVolumeModal(false);
@@ -821,6 +1169,9 @@ function App() {
                 subnet: subnet || null,
                 subnetV6: null,
                 internal: false,
+                labels: null,
+                options: null,
+                plugin: null,
               });
               if (result.success) {
                 showToast("success", "Network created");
@@ -842,7 +1193,7 @@ function App() {
         <CreateMachineModal
           images={images}
           onClose={() => setShowCreateMachineModal(false)}
-          onCreate={async (image, name, cpus, memory) => {
+          onCreate={async (image, name, cpus, memory, homeMount, setDefault) => {
             setLoading(true);
             try {
               const result = await invoke<CommandResult>("create_machine", {
@@ -850,6 +1201,12 @@ function App() {
                 name: name || null,
                 cpus: cpus || null,
                 memory: memory || null,
+                setDefault,
+                noBoot: false,
+                homeMount: homeMount || null,
+                arch: null,
+                os: null,
+                platform: null,
               });
               if (result.success) {
                 showToast("success", "Machine created");
@@ -867,13 +1224,55 @@ function App() {
         />
       )}
 
-
-
       {showInspectModal && (
         <InspectModal
           title={selectedContainer ? `Container: ${selectedContainer.id}` : "Inspect"}
           data={inspectData}
           onClose={() => { setShowInspectModal(false); setSelectedContainer(null); }}
+        />
+      )}
+
+      {showVolumeInspectModal && (
+        <InspectModal
+          title={selectedVolume ? `Volume: ${selectedVolume.name}` : "Inspect Volume"}
+          data={volumeInspectData}
+          onClose={() => { setShowVolumeInspectModal(false); setSelectedVolume(null); }}
+        />
+      )}
+
+      {showNetworkInspectModal && (
+        <InspectModal
+          title={selectedNetwork ? `Network: ${selectedNetwork.name}` : "Inspect Network"}
+          data={networkInspectData}
+          onClose={() => { setShowNetworkInspectModal(false); setSelectedNetwork(null); }}
+        />
+      )}
+
+      {showLogsModal && (
+        <LogsModal
+          containerId={logsContainerId}
+          onClose={() => setShowLogsModal(false)}
+        />
+      )}
+
+      {detailView === "container" && (
+        <ContainerDetail
+          data={detailData}
+          loading={detailLoading}
+          onBack={() => { setDetailView(null); setDetailData(null); }}
+          onAction={handleContainerAction}
+          onLogs={(id) => { setLogsContainerId(id); setShowLogsModal(true); }}
+          onExec={handleExec}
+        />
+      )}
+
+      {detailView === "image" && (
+        <ImageDetail
+          data={detailData}
+          loading={detailLoading}
+          onBack={() => { setDetailView(null); setDetailData(null); }}
+          onTag={(name) => { setTagImageSource(name); setShowTagModal(true); }}
+          onPush={(name) => { setPushImageRef(name); setShowPushModal(true); }}
         />
       )}
 
@@ -893,7 +1292,7 @@ function App() {
 
 // ==================== Tab Components ====================
 
-function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart, onDelete, onKill, onLogs, onInspect, onExec }: {
+function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart, onDelete, onKill, onLogs, onInspect, onExec, onPrune, onRowClick }: {
   containers: Container[];
   loading: boolean;
   onRefresh: () => void;
@@ -905,6 +1304,8 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
   onLogs: (id: string) => void;
   onInspect: (id: string) => void;
   onExec: (id: string) => void;
+  onPrune: () => void;
+  onRowClick: (id: string) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
@@ -914,7 +1315,9 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
     const matchText = filter === "" ||
       c.id.toLowerCase().includes(filter.toLowerCase()) ||
       c.image.toLowerCase().includes(filter.toLowerCase()) ||
-      c.ip.toLowerCase().includes(filter.toLowerCase());
+      c.ip.toLowerCase().includes(filter.toLowerCase()) ||
+      c.command.toLowerCase().includes(filter.toLowerCase()) ||
+      c.ports.toLowerCase().includes(filter.toLowerCase());
     const matchState = stateFilter === "all" || c.state === stateFilter;
     return matchText && matchState;
   });
@@ -945,17 +1348,6 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
     setSelected(new Set());
   };
 
-  const getStatsDisplay = (c: Container) => {
-    if (c.state !== "running" || !c.stats) return null;
-    const stats = c.stats;
-    const memMB = (stats.memoryUsageBytes / 1024 / 1024).toFixed(1);
-    const memLimitMB = (stats.memoryLimitBytes / 1024 / 1024).toFixed(0);
-    const memPercent = ((stats.memoryUsageBytes / stats.memoryLimitBytes) * 100).toFixed(1);
-    const cpuPercent = (stats.cpuUsageUsec / 10000).toFixed(1);
-    const blockRead = formatBytes(stats.blockReadBytes);
-    const blockWrite = formatBytes(stats.blockWriteBytes);
-    return { memMB, memLimitMB, memPercent, cpuPercent, blockRead, blockWrite, procs: stats.numProcesses };
-  };
   return (
     <div className="tab-content">
       <div className="tab-header">
@@ -977,7 +1369,7 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
           <input
             type="text"
             className="filter-input"
-            placeholder="Filter by ID, image, IP..."
+            placeholder="Filter by ID, image, command, port..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -990,13 +1382,15 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
             <option value="running">Running</option>
             <option value="exited">Exited</option>
             <option value="created">Created</option>
-            <option value="paused">Paused</option>
           </select>
           <button className="btn btn-primary" onClick={onRun}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
             Run
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>
+            Prune Stopped
           </button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1020,23 +1414,24 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
               </th>
               <th>ID</th>
               <th>Image</th>
+              <th>Command</th>
               <th>State</th>
               <th>IP</th>
-              <th>CPU</th>
-              <th>Memory</th>
-              <th>Block I/O</th>
+              <th>Ports</th>
+              <th>Resources</th>
+              <th>Created</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredContainers.length === 0 ? (
-              <tr><td colSpan={9} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
+              <tr><td colSpan={10} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
             ) : (
               filteredContainers.map((c) => {
-                const statsDisplay = getStatsDisplay(c);
+                const memMB = c.memoryBytes > 0 ? (c.memoryBytes / 1024 / 1024).toFixed(0) : null;
                 return (
-                  <tr key={c.id} className={c.state === "running" ? "row-running" : ""}>
-                    <td>
+                  <tr key={c.id} className={c.state === "running" ? "row-running" : ""} style={{ cursor: "pointer" }} onClick={() => onRowClick(c.id)}>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selected.has(c.id)}
@@ -1044,17 +1439,24 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
                       />
                     </td>
                     <td className="cell-id">{c.id.substring(0, 12)}</td>
-                    <td>{c.image}</td>
+                    <td className="cell-image">{c.image}</td>
+                    <td className="cell-command" title={c.command}>{c.command || "-"}</td>
                     <td>
                       <span className={`status-badge status-${c.state}`}>
                         {c.state}
                       </span>
                     </td>
                     <td>{c.ip || "-"}</td>
-                    <td>{statsDisplay ? `${statsDisplay.cpuPercent}%` : "-"}</td>
-                    <td>{statsDisplay ? `${statsDisplay.memMB} / ${statsDisplay.memLimitMB} MB (${statsDisplay.memPercent}%)` : "-"}</td>
-                    <td>{statsDisplay ? `R: ${statsDisplay.blockRead} / W: ${statsDisplay.blockWrite}` : "-"}</td>
-                    <td className="cell-actions">
+                    <td className="cell-ports">{c.ports || "-"}</td>
+                    <td className="cell-resources">
+                      {c.cpus > 0 || memMB ? (
+                        <span title={`CPU: ${c.cpus || "-"} cores, Memory: ${memMB ? memMB + " MB" : "-"}`}>
+                          {c.cpus > 0 ? `${c.cpus} CPU` : ""}{c.cpus > 0 && memMB ? " / " : ""}{memMB ? `${memMB} MB` : ""}
+                        </span>
+                      ) : "-"}
+                    </td>
+                    <td>{c.created || "-"}</td>
+                    <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
                       {c.state === "running" ? (
                         <>
                           <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">Stop</button>
@@ -1079,7 +1481,7 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
   );
 }
 
-function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onInspect, containers }: {
+function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onInspect, onTag, onPush, containers, onPrune, onRowClick }: {
   images: Image[];
   loading: boolean;
   onRefresh: () => void;
@@ -1087,7 +1489,11 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
   onBuild: () => void;
   onDelete: (name: string) => void;
   onInspect: (fullName: string) => void;
+  onTag: (name: string) => void;
+  onPush: (name: string) => void;
   containers: Container[];
+  onPrune: () => void;
+  onRowClick: (fullName: string) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [verbose, setVerbose] = useState(false);
@@ -1168,6 +1574,9 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
             </svg>
             Build
           </button>
+          <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>
+            Prune Unused
+          </button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>
             Refresh
           </button>
@@ -1201,13 +1610,14 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
             ) : (
               filteredImages.map((img) => {
                 const usingContainers = getContainersUsingImage(img.name, img.tag);
+                const fullName = `${img.name}:${img.tag}`;
                 return (
-                  <tr key={`${img.name}-${img.tag}`}>
-                    <td>
+                  <tr key={fullName} style={{ cursor: "pointer" }} onClick={() => onRowClick(fullName)}>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
-                        checked={selected.has(`${img.name}:${img.tag}`)}
-                        onChange={() => toggleSelect(`${img.name}:${img.tag}`)}
+                        checked={selected.has(fullName)}
+                        onChange={() => toggleSelect(fullName)}
                       />
                     </td>
                     <td>{img.name}</td>
@@ -1224,9 +1634,11 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
                         <span className="text-muted">-</span>
                       )}
                     </td>
-                    <td className="cell-actions">
-                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(`${img.name}:${img.tag}`)} title="Inspect">Inspect</button>
-                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(`${img.name}:${img.tag}`)} title="Delete" disabled={usingContainers.length > 0}>Delete</button>
+                    <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                      <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">Tag</button>
+                      <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">Push</button>
+                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">Inspect</button>
+                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>Delete</button>
                     </td>
                   </tr>
                 );
@@ -1239,12 +1651,14 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
   );
 }
 
-function VolumesTab({ volumes, loading, onRefresh, onCreate, onDelete }: {
+function VolumesTab({ volumes, loading, onRefresh, onCreate, onDelete, onInspect, onPrune }: {
   volumes: Volume[];
   loading: boolean;
   onRefresh: () => void;
   onCreate: () => void;
   onDelete: (name: string) => void;
+  onInspect: (name: string) => void;
+  onPrune: () => void;
 }) {
   return (
     <div className="tab-content">
@@ -1252,6 +1666,7 @@ function VolumesTab({ volumes, loading, onRefresh, onCreate, onDelete }: {
         <h2>Volumes</h2>
         <div className="tab-actions">
           <button className="btn btn-primary" onClick={onCreate}>Create</button>
+          <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>Prune Unused</button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>Refresh</button>
         </div>
       </div>
@@ -1277,6 +1692,7 @@ function VolumesTab({ volumes, loading, onRefresh, onCreate, onDelete }: {
                   <td>{v.size || "-"}</td>
                   <td className="cell-digest">{v.source}</td>
                   <td className="cell-actions">
+                    <button className="btn btn-xs btn-secondary" onClick={() => onInspect(v.name)} title="Inspect">Inspect</button>
                     <button className="btn btn-xs btn-danger" onClick={() => onDelete(v.name)} title="Delete">Delete</button>
                   </td>
                 </tr>
@@ -1289,12 +1705,14 @@ function VolumesTab({ volumes, loading, onRefresh, onCreate, onDelete }: {
   );
 }
 
-function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete }: {
+function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete, onInspect, onPrune }: {
   networks: Network[];
   loading: boolean;
   onRefresh: () => void;
   onCreate: () => void;
   onDelete: (name: string) => void;
+  onInspect: (name: string) => void;
+  onPrune: () => void;
 }) {
   return (
     <div className="tab-content">
@@ -1302,6 +1720,7 @@ function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete }: {
         <h2>Networks</h2>
         <div className="tab-actions">
           <button className="btn btn-primary" onClick={onCreate}>Create</button>
+          <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>Prune Unused</button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>Refresh</button>
         </div>
       </div>
@@ -1325,6 +1744,7 @@ function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete }: {
                   <td><span className={`status-badge status-${n.state}`}>{n.state}</span></td>
                   <td>{n.subnet}</td>
                   <td className="cell-actions">
+                    <button className="btn btn-xs btn-secondary" onClick={() => onInspect(n.name)} title="Inspect">Inspect</button>
                     <button className="btn btn-xs btn-danger" onClick={() => onDelete(n.name)} title="Delete">Delete</button>
                   </td>
                 </tr>
@@ -1337,7 +1757,7 @@ function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete }: {
   );
 }
 
-function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, onDelete, onInspect }: {
+function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, onDelete, onInspect, onSetDefault }: {
   machines: Machine[];
   loading: boolean;
   onRefresh: () => void;
@@ -1346,6 +1766,7 @@ function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, 
   onStop: (name: string) => void;
   onDelete: (name: string) => void;
   onInspect: (name: string) => void;
+  onSetDefault: (name: string) => void;
 }) {
   return (
     <div className="tab-content">
@@ -1389,6 +1810,9 @@ function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, 
                     ) : (
                       <button className="btn btn-xs btn-success" onClick={() => onStart(m.id)} title="Start">Start</button>
                     )}
+                    {!m.isDefault && (
+                      <button className="btn btn-xs btn-info" onClick={() => onSetDefault(m.id)} title="Set Default">Set Default</button>
+                    )}
                     <button className="btn btn-xs btn-secondary" onClick={() => onInspect(m.id)} title="Inspect">Inspect</button>
                     <button className="btn btn-xs btn-danger" onClick={() => onDelete(m.id)} title="Delete">Delete</button>
                   </td>
@@ -1409,6 +1833,7 @@ function RunContainerModal({ images, onClose, onRun }: {
   onClose: () => void;
   onRun: (config: Record<string, unknown>) => void;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [image, setImage] = useState(images[0] ? `${images[0].name}:${images[0].tag}` : "");
   const [name, setName] = useState("");
   const [detach, setDetach] = useState(true);
@@ -1421,13 +1846,27 @@ function RunContainerModal({ images, onClose, onRun }: {
   const [network, setNetwork] = useState("");
   const [entrypoint, setEntrypoint] = useState("");
   const [workdir, setWorkdir] = useState("");
+  const [arch, setArch] = useState("");
+  const [capAdd, setCapAdd] = useState("");
+  const [capDrop, setCapDrop] = useState("");
+  const [dns, setDns] = useState("");
+  const [dnsDomain, setDnsDomain] = useState("");
+  const [init, setInit] = useState(false);
+  const [label, setLabel] = useState("");
+  const [mount, setMount] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
+  const [rosetta, setRosetta] = useState(false);
+  const [runtime, setRuntime] = useState("");
+  const [ssh, setSsh] = useState(false);
+  const [shmSize, setShmSize] = useState("");
+  const [user, setUser] = useState("");
 
   return (
     <Modal onClose={onClose}>
       <h2>Run Container</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Image</label>
+          <label>Image *</label>
           <input value={image} onChange={(e) => setImage(e.target.value)} placeholder="docker.io/library/nginx:latest" />
         </div>
         <div className="form-group">
@@ -1471,13 +1910,79 @@ function RunContainerModal({ images, onClose, onRun }: {
           <label><input type="checkbox" checked={rm} onChange={(e) => setRm(e.target.checked)} /> Auto-remove</label>
         </div>
       </div>
+
+      <button className="btn btn-secondary btn-sm" style={{ margin: "12px 0" }} onClick={() => setShowAdvanced(!showAdvanced)}>
+        {showAdvanced ? "Hide Advanced" : "Show Advanced Options"}
+      </button>
+
+      {showAdvanced && (
+        <div className="form-grid" style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+          <div className="form-group">
+            <label>Architecture</label>
+            <select value={arch} onChange={(e) => setArch(e.target.value)}>
+              <option value="">Default (arm64)</option>
+              <option value="arm64">arm64</option>
+              <option value="amd64">amd64</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>User</label>
+            <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="root or 1000:1000" />
+          </div>
+          <div className="form-group">
+            <label>Cap Add</label>
+            <input value={capAdd} onChange={(e) => setCapAdd(e.target.value)} placeholder="CAP_NET_RAW" />
+          </div>
+          <div className="form-group">
+            <label>Cap Drop</label>
+            <input value={capDrop} onChange={(e) => setCapDrop(e.target.value)} placeholder="CAP_NET_RAW" />
+          </div>
+          <div className="form-group">
+            <label>DNS</label>
+            <input value={dns} onChange={(e) => setDns(e.target.value)} placeholder="8.8.8.8" />
+          </div>
+          <div className="form-group">
+            <label>DNS Domain</label>
+            <input value={dnsDomain} onChange={(e) => setDnsDomain(e.target.value)} placeholder="example.com" />
+          </div>
+          <div className="form-group">
+            <label>Label (key=value)</label>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="app=web" />
+          </div>
+          <div className="form-group">
+            <label>Mount</label>
+            <input value={mount} onChange={(e) => setMount(e.target.value)} placeholder="type=bind,source=/data,target=/app" />
+          </div>
+          <div className="form-group">
+            <label>Runtime</label>
+            <input value={runtime} onChange={(e) => setRuntime(e.target.value)} placeholder="container-runtime-linux" />
+          </div>
+          <div className="form-group">
+            <label>SHM Size</label>
+            <input value={shmSize} onChange={(e) => setShmSize(e.target.value)} placeholder="64M" />
+          </div>
+          <div className="form-group form-checkboxes">
+            <label><input type="checkbox" checked={init} onChange={(e) => setInit(e.target.checked)} /> Init process</label>
+            <label><input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} /> Read-only</label>
+            <label><input type="checkbox" checked={rosetta} onChange={(e) => setRosetta(e.target.checked)} /> Rosetta</label>
+            <label><input type="checkbox" checked={ssh} onChange={(e) => setSsh(e.target.checked)} /> SSH agent</label>
+          </div>
+        </div>
+      )}
+
       <div className="modal-actions">
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={() => onRun({
           image, name: name || null, detach, rm, cpus: cpus || null, memory: memory || null,
           ports: ports || null, envs: envs || null, volumes: volumes || null, network: network || null,
-          entrypoint: entrypoint || null, workingDir: workdir || null
-        })}>Run</button>
+          entrypoint: entrypoint || null, workingDir: workdir || null,
+          arch: arch || null, capAdd: capAdd || null, capDrop: capDrop || null,
+          dns: dns || null, dnsDomain: dnsDomain || null, dnsOption: null, dnsSearch: null,
+          init, label: label || null, mount: mount || null, noDns: false,
+          os: null, platform: null, readOnly, rosetta, runtime: runtime || null,
+          ssh, shmSize: shmSize || null, tmpfs: null, ulimit: null, user: user || null,
+          maxConcurrentDownloads: null, progress: null,
+        })} disabled={!image}>Run</button>
       </div>
     </Modal>
   );
@@ -1521,7 +2026,7 @@ function BuildImageModal({ onClose, onBuild }: {
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={() => onBuild({
           context, tag, dockerfile: dockerfile || null, noCache, buildArgs: buildArgs || null
-        })}>Build</button>
+        })} disabled={!tag}>Build</button>
       </div>
     </Modal>
   );
@@ -1559,7 +2064,7 @@ function PullImageModal({ onClose, onPull }: {
     <Modal onClose={() => { if (!pulling) onClose(); }}>
       <h2>Pull Image</h2>
       <div className="form-grid">
-        <div className="form-group">
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
           <label>Image Reference</label>
           <input
             value={reference}
@@ -1588,6 +2093,107 @@ function PullImageModal({ onClose, onPull }: {
   );
 }
 
+function TagImageModal({ source, onClose, onTag }: {
+  source: string;
+  onClose: () => void;
+  onTag: (source: string, target: string) => void;
+}) {
+  const [target, setTarget] = useState("");
+  return (
+    <Modal onClose={onClose}>
+      <h2>Tag Image</h2>
+      <div className="form-grid">
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Source Image</label>
+          <input value={source} readOnly style={{ opacity: 0.7 }} />
+        </div>
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Target Reference</label>
+          <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="myregistry.io/myimage:v1.0" autoFocus />
+        </div>
+      </div>
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={() => onTag(source, target)} disabled={!target}>Tag</button>
+      </div>
+    </Modal>
+  );
+}
+
+function PushImageModal({ reference, onClose, onPush }: {
+  reference: string;
+  onClose: () => void;
+  onPush: (reference: string) => void;
+}) {
+  const [ref, setRef] = useState(reference);
+  return (
+    <Modal onClose={onClose}>
+      <h2>Push Image</h2>
+      <div className="form-grid">
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Image Reference</label>
+          <input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="myregistry.io/myimage:tag" autoFocus />
+        </div>
+      </div>
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={() => onPush(ref)} disabled={!ref}>Push</button>
+      </div>
+    </Modal>
+  );
+}
+
+function LogsModal({ containerId, onClose }: {
+  containerId: string;
+  onClose: () => void;
+}) {
+  const [logs, setLogs] = useState("");
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [lines, setLines] = useState("200");
+  const logsRef = useRef<HTMLPreElement>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    try {
+      const result = await invoke<CommandResult>("get_container_logs", {
+        id: containerId,
+        follow: false,
+        lines: parseInt(lines) || null,
+      });
+      setLogs(result.stdout || result.stderr || "(no logs)");
+    } catch (e) {
+      setLogs(String(e));
+    } finally {
+      setLoadingLogs(false);
+    }
+  }, [containerId, lines]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  return (
+    <Modal onClose={onClose}>
+      <h2>Container Logs: {containerId.substring(0, 12)}</h2>
+      <div className="form-group" style={{ marginBottom: 12 }}>
+        <label>Lines</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input value={lines} onChange={(e) => setLines(e.target.value)} style={{ width: 80 }} placeholder="200" />
+          <button className="btn btn-sm btn-secondary" onClick={fetchLogs} disabled={loadingLogs}>
+            {loadingLogs ? "Loading..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+      <div className="logs-content">
+        <pre ref={logsRef}>{loadingLogs ? "Loading..." : logs}</pre>
+      </div>
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+      </div>
+    </Modal>
+  );
+}
+
 function CreateVolumeModal({ onClose, onCreate }: {
   onClose: () => void;
   onCreate: (name: string, size: string) => void;
@@ -1599,7 +2205,7 @@ function CreateVolumeModal({ onClose, onCreate }: {
       <h2>Create Volume</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Name</label>
+          <label>Name *</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-volume" autoFocus />
         </div>
         <div className="form-group">
@@ -1626,7 +2232,7 @@ function CreateNetworkModal({ onClose, onCreate }: {
       <h2>Create Network</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Name</label>
+          <label>Name *</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-network" autoFocus />
         </div>
         <div className="form-group">
@@ -1645,18 +2251,20 @@ function CreateNetworkModal({ onClose, onCreate }: {
 function CreateMachineModal({ images, onClose, onCreate }: {
   images: Image[];
   onClose: () => void;
-  onCreate: (image: string, name: string, cpus: string, memory: string) => void;
+  onCreate: (image: string, name: string, cpus: string, memory: string, homeMount: string, setDefault: boolean) => void;
 }) {
   const [image, setImage] = useState(images[0] ? `${images[0].name}:${images[0].tag}` : "");
   const [name, setName] = useState("");
   const [cpus, setCpus] = useState("");
   const [memory, setMemory] = useState("");
+  const [homeMount, setHomeMount] = useState("rw");
+  const [setDefault, setSetDefault] = useState(false);
   return (
     <Modal onClose={onClose}>
       <h2>Create Machine</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Image</label>
+          <label>Image *</label>
           <select value={image} onChange={(e) => setImage(e.target.value)}>
             {images.map((img) => (
               <option key={`${img.name}:${img.tag}`} value={`${img.name}:${img.tag}`}>
@@ -1677,25 +2285,474 @@ function CreateMachineModal({ images, onClose, onCreate }: {
           <label>Memory (optional)</label>
           <input value={memory} onChange={(e) => setMemory(e.target.value)} placeholder="4G" />
         </div>
+        <div className="form-group">
+          <label>Home Mount</label>
+          <select value={homeMount} onChange={(e) => setHomeMount(e.target.value)}>
+            <option value="rw">Read/Write</option>
+            <option value="ro">Read Only</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div className="form-group form-checkboxes">
+          <label><input type="checkbox" checked={setDefault} onChange={(e) => setSetDefault(e.target.checked)} /> Set as default</label>
+        </div>
       </div>
       <div className="modal-actions">
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={() => onCreate(image, name, cpus, memory)} disabled={!image}>Create</button>
+        <button className="btn btn-primary" onClick={() => onCreate(image, name, cpus, memory, homeMount, setDefault)} disabled={!image}>Create</button>
       </div>
     </Modal>
   );
 }
 
+function TerminalTab() {
+  const [history, setHistory] = useState<Array<{ cmd: string; output: string; success: boolean }>>([]);
+  const [input, setInput] = useState("");
+  const [executing, setExecuting] = useState(false);
+  const outputRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (outputRef.current) {
+      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+    }
+  }, [history]);
+
+  const handleExecute = async () => {
+    const cmd = input.trim();
+    if (!cmd || executing) return;
+    setInput("");
+    setExecuting(true);
+    try {
+      const result = await invoke<CommandResult>("run_raw_command", { command: cmd });
+      setHistory((prev) => [...prev, { cmd, output: result.stdout || result.stderr, success: result.success }]);
+    } catch (e) {
+      setHistory((prev) => [...prev, { cmd, output: String(e), success: false }]);
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleExecute();
+    }
+  };
+
+  return (
+    <div className="tab-content">
+      <div className="tab-header">
+        <h2>Terminal</h2>
+        <div className="tab-actions">
+          <button className="btn btn-secondary btn-sm" onClick={() => setHistory([])}>Clear</button>
+        </div>
+      </div>
+      <div className="terminal-tab">
+        <div className="terminal-container">
+          <div className="terminal-output" ref={outputRef}>
+            {history.length === 0 && (
+              <div className="terminal-line" style={{ color: "var(--text-muted)" }}>
+                Apple Container CLI Terminal. Type commands below. Example: container ls
+              </div>
+            )}
+            {history.map((entry, i) => (
+              <div key={i}>
+                <div className="terminal-line terminal-command">$ {entry.cmd}</div>
+                <div className={`terminal-line ${entry.success ? "terminal-result" : "terminal-error"}`}>
+                  {entry.output || "(no output)"}
+                </div>
+              </div>
+            ))}
+            {executing && <div className="terminal-line terminal-result">Executing...</div>}
+          </div>
+          <form className="terminal-input-form" onSubmit={(e) => { e.preventDefault(); handleExecute(); }}>
+            <span className="terminal-prompt">$</span>
+            <input
+              className="terminal-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="container command..."
+              disabled={executing}
+              autoFocus
+            />
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="detail-section">
+      <h3 className="detail-section-title">{title}</h3>
+      <div className="detail-section-body">{children}</div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div className="detail-row">
+      <span className="detail-label">{label}</span>
+      <span className="detail-value">{value}</span>
+    </div>
+  );
+}
+
+function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec }: {
+  data: Record<string, unknown> | null;
+  loading: boolean;
+  onBack: () => void;
+  onAction: (action: string, id: string) => void;
+  onLogs: (id: string) => void;
+  onExec: (id: string) => void;
+}) {
+  const config = (data?.configuration || {}) as Record<string, unknown>;
+  const stateObj = (data?.status || {}) as Record<string, unknown>;
+  const platform = (config.platform || {}) as Record<string, unknown>;
+  const image = (config.image || {}) as Record<string, unknown>;
+  const networks = (stateObj.networks || []) as Array<Record<string, unknown>>;
+  const mounts = (config.mounts || []) as Array<Record<string, unknown>>;
+  const initProcess = (config.initProcess || {}) as Record<string, unknown>;
+  const env = (initProcess.environment || []) as string[];
+  const args = (initProcess.arguments || []) as string[];
+  const executable = (initProcess.executable || "") as string;
+  const res = (config.resources || {}) as Record<string, unknown>;
+  const labels = (config.labels || {}) as Record<string, string>;
+  const publishedPorts = (config.publishedPorts || []) as Array<Record<string, unknown>>;
+  const startedAt = (stateObj.startedDate || "") as string;
+  const state = (stateObj.state || "") as string;
+  const os = (platform.os || "") as string;
+  const arch = (platform.architecture || "") as string;
+  const imageRef = (image.reference || "") as string;
+  const id = (config.id || data?.id || "") as string;
+  const stopSignal = (config.stopSignal || "") as string;
+  const creationDate = (config.creationDate || "") as string;
+  const cpus = (res.cpus || 0) as number;
+  const memBytes = (res.memoryInBytes || 0) as number;
+
+  if (loading) {
+    return (
+      <div className="detail-page">
+        <div className="detail-header">
+          <button className="btn btn-secondary" onClick={onBack}>Back</button>
+          <h2>Loading...</h2>
+        </div>
+        <div className="detail-loading">Loading container details...</div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="detail-page">
+        <div className="detail-header">
+          <button className="btn btn-secondary" onClick={onBack}>Back</button>
+          <h2>Container Details</h2>
+        </div>
+        <div className="detail-loading">No data available</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail-page">
+      <div className="detail-header">
+        <button className="btn btn-secondary" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+          Back
+        </button>
+        <div className="detail-title-area">
+          <h2>Container</h2>
+          <span className={`status-badge status-${state}`}>{state}</span>
+        </div>
+        <div className="detail-actions">
+          {state === "running" ? (
+            <>
+              <button className="btn btn-warning btn-sm" onClick={() => onAction("stop", id)}>Stop</button>
+              <button className="btn btn-danger btn-sm" onClick={() => onAction("kill", id)}>Kill</button>
+            </>
+          ) : (
+            <button className="btn btn-success btn-sm" onClick={() => onAction("start", id)}>Start</button>
+          )}
+          <button className="btn btn-info btn-sm" onClick={() => onLogs(id)}>Logs</button>
+          <button className="btn btn-success btn-sm" onClick={() => onExec(id)}>Exec</button>
+          <button className="btn btn-danger btn-sm" onClick={() => onAction("delete", id)}>Delete</button>
+        </div>
+      </div>
+
+      <div className="detail-body">
+        <DetailSection title="General">
+          <DetailRow label="ID" value={<span className="cell-id">{id}</span>} />
+          <DetailRow label="Image" value={imageRef || "-"} />
+          <DetailRow label="Command" value={args.length > 0 ? <code>{args.join(" ")}</code> : (executable || "-")} />
+          <DetailRow label="OS" value={os || "-"} />
+          <DetailRow label="Architecture" value={arch || "-"} />
+          <DetailRow label="Stop Signal" value={stopSignal || "-"} />
+          <DetailRow label="Created" value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
+          <DetailRow label="Started" value={startedAt ? new Date(startedAt).toLocaleString() : "-"} />
+        </DetailSection>
+
+        <DetailSection title="Resources">
+          <DetailRow label="CPUs" value={cpus > 0 ? String(cpus) : "-"} />
+          <DetailRow label="Memory Limit" value={memBytes > 0 ? formatBytes(memBytes) : "-"} />
+        </DetailSection>
+
+        {publishedPorts.length > 0 && (
+          <DetailSection title="Published Ports">
+            {publishedPorts.map((p, i) => (
+              <div key={i} className="detail-network-card">
+                <DetailRow label="Host" value={`${(p.hostAddress || "0.0.0.0") as string}:${(p.hostPort || "") as number}`} />
+                <DetailRow label="Container" value={`${(p.containerPort || "") as number}/${(p.proto || "tcp") as string}`} />
+              </div>
+            ))}
+          </DetailSection>
+        )}
+
+        {Object.keys(labels).length > 0 && (
+          <DetailSection title="Labels">
+            {Object.entries(labels).map(([k, v]) => (
+              <DetailRow key={k} label={k} value={v} />
+            ))}
+          </DetailSection>
+        )}
+
+        {env.length > 0 && (
+          <DetailSection title="Environment">
+            <div className="detail-env-list">
+              {env.map((e, i) => (
+                <code key={i} className="detail-env-item">{e}</code>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+
+        {networks.length > 0 && (
+          <DetailSection title="Networks">
+            {networks.map((n, i) => (
+              <div key={i} className="detail-network-card">
+                <DetailRow label="Network" value={(n.network || "") as string} />
+                <DetailRow label="IPv4" value={(n.ipv4Address || "") as string} />
+                <DetailRow label="IPv6" value={(n.ipv6Address || "") as string} />
+                <DetailRow label="Gateway" value={(n.ipv4Gateway || "") as string} />
+                <DetailRow label="MAC" value={(n.macAddress || "") as string} />
+              </div>
+            ))}
+          </DetailSection>
+        )}
+
+        {mounts.length > 0 && (
+          <DetailSection title="Mounts">
+            {mounts.map((m, i) => (
+              <div key={i} className="detail-mount-card">
+                <DetailRow label="Type" value={(m.type || "") as string} />
+                <DetailRow label="Source" value={<span className="cell-digest">{(m.source || "") as string}</span>} />
+                <DetailRow label="Destination" value={(m.destination || "") as string} />
+                <DetailRow label="Mode" value={(m.mode || "") as string} />
+                <DetailRow label="RW" value={(m.rw !== undefined) ? (m.rw ? "Yes" : "No") : "-"} />
+              </div>
+            ))}
+          </DetailSection>
+        )}
+
+        {(() => {
+          const dns = (config.dns || {}) as Record<string, unknown>;
+          const servers = (dns.nameservers || []) as string[];
+          const search = (dns.searchDomains || []) as string[];
+          const options = (dns.options || []) as string[];
+          const domain = (dns.domain || "") as string;
+          if (servers.length === 0 && search.length === 0 && options.length === 0 && !domain) return null;
+          return (
+            <DetailSection title="DNS">
+              <DetailRow label="Servers" value={servers.join(", ") || "-"} />
+              <DetailRow label="Search" value={search.join(", ") || "-"} />
+              <DetailRow label="Options" value={options.join(", ") || "-"} />
+              <DetailRow label="Domain" value={domain || "-"} />
+            </DetailSection>
+          );
+        })()}
+
+        <DetailSection title="Raw JSON">
+          <div className="inspect-content">
+            <pre>{JSON.stringify(data, null, 2)}</pre>
+          </div>
+        </DetailSection>
+      </div>
+    </div>
+  );
+}
+
+function ImageDetail({ data, loading, onBack, onTag, onPush }: {
+  data: Record<string, unknown> | null;
+  loading: boolean;
+  onBack: () => void;
+  onTag: (name: string) => void;
+  onPush: (name: string) => void;
+}) {
+  const config = (data?.configuration || {}) as Record<string, unknown>;
+  const name = (config.name || "") as string;
+  const created = (config.created || "") as string;
+  const arch = (config.architecture || "") as string;
+  const os = (config.os || "") as string;
+  const author = (config.author || "") as string;
+  const desc = (config.descriptor || {}) as Record<string, unknown>;
+  const size = (desc.size || 0) as number;
+  const mediatype = (desc.mediaType || "") as string;
+  const configObj = (config.config || {}) as Record<string, unknown>;
+  const entrypoint = (configObj.Entrypoint || []) as string[];
+  const cmd = (configObj.Cmd || []) as string[];
+  const env = (configObj.Env || []) as string[];
+  const workingDir = (configObj.WorkingDir || "") as string;
+  const user = (configObj.User || "") as string;
+  const exposedPorts = (configObj.ExposedPorts || {}) as Record<string, unknown>;
+  const labels = (configObj.Labels || {}) as Record<string, string>;
+  const history = (config.history || []) as Array<Record<string, unknown>>;
+  const rootfs = (config.rootfs || {}) as Record<string, unknown>;
+  const diffIDs = (rootfs.diff_ids || []) as string[];
+  const id = (data?.id || "") as string;
+
+  if (loading) {
+    return (
+      <div className="detail-page">
+        <div className="detail-header">
+          <button className="btn btn-secondary" onClick={onBack}>Back</button>
+          <h2>Loading...</h2>
+        </div>
+        <div className="detail-loading">Loading image details...</div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="detail-page">
+        <div className="detail-header">
+          <button className="btn btn-secondary" onClick={onBack}>Back</button>
+          <h2>Image Details</h2>
+        </div>
+        <div className="detail-loading">No data available</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail-page">
+      <div className="detail-header">
+        <button className="btn btn-secondary" onClick={onBack}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+          Back
+        </button>
+        <div className="detail-title-area">
+          <h2>Image</h2>
+          <span className="tag-badge">{name}</span>
+        </div>
+        <div className="detail-actions">
+          <button className="btn btn-info btn-sm" onClick={() => onTag(name)}>Tag</button>
+          <button className="btn btn-success btn-sm" onClick={() => onPush(name)}>Push</button>
+        </div>
+      </div>
+
+      <div className="detail-body">
+        <DetailSection title="General">
+          <DetailRow label="ID" value={<span className="cell-digest">{id}</span>} />
+          <DetailRow label="Name" value={name || "-"} />
+          <DetailRow label="Created" value={created ? new Date(created).toLocaleString() : "-"} />
+          <DetailRow label="Author" value={author || "-"} />
+          <DetailRow label="Architecture" value={arch || "-"} />
+          <DetailRow label="OS" value={os || "-"} />
+          <DetailRow label="Size" value={size ? formatBytes(size) : "-"} />
+          <DetailRow label="Media Type" value={mediatype || "-"} />
+        </DetailSection>
+
+        <DetailSection title="Configuration">
+          <DetailRow label="Entrypoint" value={entrypoint.length > 0 ? <code>{entrypoint.join(" ")}</code> : "-"} />
+          <DetailRow label="Cmd" value={cmd.length > 0 ? <code>{cmd.join(" ")}</code> : "-"} />
+          <DetailRow label="Working Dir" value={workingDir || "-"} />
+          <DetailRow label="User" value={user || "-"} />
+          {Object.keys(exposedPorts).length > 0 && (
+            <DetailRow label="Exposed Ports" value={Object.keys(exposedPorts).join(", ")} />
+          )}
+        </DetailSection>
+
+        {env.length > 0 && (
+          <DetailSection title="Environment">
+            <div className="detail-env-list">
+              {env.map((e, i) => (
+                <code key={i} className="detail-env-item">{e}</code>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+
+        {Object.keys(labels).length > 0 && (
+          <DetailSection title="Labels">
+            {Object.entries(labels).map(([k, v]) => (
+              <DetailRow key={k} label={k} value={v} />
+            ))}
+          </DetailSection>
+        )}
+
+        {diffIDs.length > 0 && (
+          <DetailSection title={`Layers (${diffIDs.length})`}>
+            <div className="detail-layers">
+              {diffIDs.map((d, i) => (
+                <div key={i} className="detail-layer">
+                  <span className="detail-layer-num">#{i + 1}</span>
+                  <code className="detail-layer-id">{d}</code>
+                </div>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+
+        {history.length > 0 && (
+          <DetailSection title="Build History">
+            <div className="detail-history">
+              {history.map((h, i) => (
+                <div key={i} className="detail-history-item">
+                  <span className="detail-history-num">#{i + 1}</span>
+                  <div className="detail-history-info">
+                    {(h.created_by || "") as string && (
+                      <code className="detail-history-cmd">{(h.created_by || "") as string}</code>
+                    )}
+                    <span className="detail-history-meta">
+                      {h.size ? `${formatBytes(Number(h.size))}` : ""}
+                      {h.empty_layer ? " (empty layer)" : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+
+        <DetailSection title="Raw JSON">
+          <div className="inspect-content">
+            <pre>{JSON.stringify(data, null, 2)}</pre>
+          </div>
+        </DetailSection>
+      </div>
+    </div>
+  );
+}
 
 function InspectModal({ title, data, onClose }: {
   title: string;
   data: string;
   onClose: () => void;
 }) {
+  const handleCopy = () => {
+    navigator.clipboard.writeText(data);
+  };
   return (
     <Modal onClose={onClose}>
-      <h2>{title}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>{title}</h2>
+        <button className="btn btn-sm btn-secondary" onClick={handleCopy}>Copy</button>
+      </div>
       <div className="inspect-content">
         <pre>{data}</pre>
       </div>

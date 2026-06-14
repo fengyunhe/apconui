@@ -104,6 +104,29 @@ async fn run_container(
     network: Option<String>,
     entrypoint: Option<String>,
     working_dir: Option<String>,
+    arch: Option<String>,
+    cap_add: Option<String>,
+    cap_drop: Option<String>,
+    dns: Option<String>,
+    dns_domain: Option<String>,
+    dns_option: Option<String>,
+    dns_search: Option<String>,
+    init: bool,
+    label: Option<String>,
+    mount: Option<String>,
+    no_dns: bool,
+    os: Option<String>,
+    platform: Option<String>,
+    read_only: bool,
+    rosetta: bool,
+    runtime: Option<String>,
+    ssh: bool,
+    shm_size: Option<String>,
+    tmpfs: Option<String>,
+    ulimit: Option<String>,
+    user: Option<String>,
+    max_concurrent_downloads: Option<String>,
+    progress: Option<String>,
 ) -> CommandResult {
     let mut args: Vec<String> = vec!["run".into()];
 
@@ -154,6 +177,93 @@ async fn run_container(
     if let Some(wd) = working_dir {
         args.push("-w".into());
         args.push(wd);
+    }
+    if let Some(a) = arch {
+        args.push("-a".into());
+        args.push(a);
+    }
+    if let Some(ca) = cap_add {
+        args.push("--cap-add".into());
+        args.push(ca);
+    }
+    if let Some(cd) = cap_drop {
+        args.push("--cap-drop".into());
+        args.push(cd);
+    }
+    if let Some(d) = dns {
+        args.push("--dns".into());
+        args.push(d);
+    }
+    if let Some(dd) = dns_domain {
+        args.push("--dns-domain".into());
+        args.push(dd);
+    }
+    if let Some(do_) = dns_option {
+        args.push("--dns-option".into());
+        args.push(do_);
+    }
+    if let Some(ds) = dns_search {
+        args.push("--dns-search".into());
+        args.push(ds);
+    }
+    if init {
+        args.push("--init".into());
+    }
+    if let Some(l) = label {
+        args.push("-l".into());
+        args.push(l);
+    }
+    if let Some(mnt) = mount {
+        args.push("--mount".into());
+        args.push(mnt);
+    }
+    if no_dns {
+        args.push("--no-dns".into());
+    }
+    if let Some(o) = os {
+        args.push("--os".into());
+        args.push(o);
+    }
+    if let Some(p) = platform {
+        args.push("--platform".into());
+        args.push(p);
+    }
+    if read_only {
+        args.push("--read-only".into());
+    }
+    if rosetta {
+        args.push("--rosetta".into());
+    }
+    if let Some(r) = runtime {
+        args.push("--runtime".into());
+        args.push(r);
+    }
+    if ssh {
+        args.push("--ssh".into());
+    }
+    if let Some(ss) = shm_size {
+        args.push("--shm-size".into());
+        args.push(ss);
+    }
+    if let Some(t) = tmpfs {
+        args.push("--tmpfs".into());
+        args.push(t);
+    }
+    if let Some(u) = ulimit {
+        args.push("--ulimit".into());
+        args.push(u);
+    }
+    if let Some(usr) = user {
+        args.push("-u".into());
+        args.push(usr);
+    }
+    if let Some(mcd) = max_concurrent_downloads {
+        args.push("--max-concurrent-downloads".into());
+        args.push(mcd);
+    }
+    if let Some(p) = progress {
+        args.push("--progress".into());
+        args.push(p);
     }
 
     args.push(image);
@@ -282,6 +392,193 @@ async fn get_container_stats(id: Option<String>) -> CommandResult {
     if let Some(i) = id {
         args.push(i);
     }
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn create_container(
+    image: String,
+    name: Option<String>,
+    cpus: Option<String>,
+    memory: Option<String>,
+    ports: Option<String>,
+    envs: Option<String>,
+    volumes: Option<String>,
+    network: Option<String>,
+    entrypoint: Option<String>,
+    working_dir: Option<String>,
+    arch: Option<String>,
+    cap_add: Option<String>,
+    cap_drop: Option<String>,
+    dns: Option<String>,
+    dns_domain: Option<String>,
+    dns_option: Option<String>,
+    dns_search: Option<String>,
+    init: bool,
+    label: Option<String>,
+    mount: Option<String>,
+    no_dns: bool,
+    os: Option<String>,
+    platform: Option<String>,
+    read_only: bool,
+    rosetta: bool,
+    runtime: Option<String>,
+    shm_size: Option<String>,
+    tmpfs: Option<String>,
+    ulimit: Option<String>,
+    user: Option<String>,
+    max_concurrent_downloads: Option<String>,
+    progress: Option<String>,
+) -> CommandResult {
+    let mut args: Vec<String> = vec!["create".into()];
+    if let Some(n) = name {
+        args.push("--name".into());
+        args.push(n);
+    }
+    if let Some(c) = cpus {
+        args.push("-c".into());
+        args.push(c);
+    }
+    if let Some(m) = memory {
+        args.push("-m".into());
+        args.push(m);
+    }
+    if let Some(p) = ports {
+        for port in p.split(',') {
+            args.push("-p".into());
+            args.push(port.trim().to_string());
+        }
+    }
+    if let Some(e) = envs {
+        for env in e.split(',') {
+            args.push("-e".into());
+            args.push(env.trim().to_string());
+        }
+    }
+    if let Some(v) = volumes {
+        for vol in v.split(',') {
+            args.push("-v".into());
+            args.push(vol.trim().to_string());
+        }
+    }
+    if let Some(n) = network {
+        args.push("--network".into());
+        args.push(n);
+    }
+    if let Some(ep) = entrypoint {
+        args.push("--entrypoint".into());
+        args.push(ep);
+    }
+    if let Some(wd) = working_dir {
+        args.push("-w".into());
+        args.push(wd);
+    }
+    if let Some(a) = arch {
+        args.push("-a".into());
+        args.push(a);
+    }
+    if let Some(ca) = cap_add {
+        args.push("--cap-add".into());
+        args.push(ca);
+    }
+    if let Some(cd) = cap_drop {
+        args.push("--cap-drop".into());
+        args.push(cd);
+    }
+    if let Some(d) = dns {
+        args.push("--dns".into());
+        args.push(d);
+    }
+    if let Some(dd) = dns_domain {
+        args.push("--dns-domain".into());
+        args.push(dd);
+    }
+    if let Some(do_) = dns_option {
+        args.push("--dns-option".into());
+        args.push(do_);
+    }
+    if let Some(ds) = dns_search {
+        args.push("--dns-search".into());
+        args.push(ds);
+    }
+    if init {
+        args.push("--init".into());
+    }
+    if let Some(l) = label {
+        args.push("-l".into());
+        args.push(l);
+    }
+    if let Some(mnt) = mount {
+        args.push("--mount".into());
+        args.push(mnt);
+    }
+    if no_dns {
+        args.push("--no-dns".into());
+    }
+    if let Some(o) = os {
+        args.push("--os".into());
+        args.push(o);
+    }
+    if let Some(p) = platform {
+        args.push("--platform".into());
+        args.push(p);
+    }
+    if read_only {
+        args.push("--read-only".into());
+    }
+    if rosetta {
+        args.push("--rosetta".into());
+    }
+    if let Some(r) = runtime {
+        args.push("--runtime".into());
+        args.push(r);
+    }
+    if let Some(ss) = shm_size {
+        args.push("--shm-size".into());
+        args.push(ss);
+    }
+    if let Some(t) = tmpfs {
+        args.push("--tmpfs".into());
+        args.push(t);
+    }
+    if let Some(u) = ulimit {
+        args.push("--ulimit".into());
+        args.push(u);
+    }
+    if let Some(usr) = user {
+        args.push("-u".into());
+        args.push(usr);
+    }
+    if let Some(mcd) = max_concurrent_downloads {
+        args.push("--max-concurrent-downloads".into());
+        args.push(mcd);
+    }
+    if let Some(p) = progress {
+        args.push("--progress".into());
+        args.push(p);
+    }
+    args.push(image);
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn copy_from_container(id: String, container_path: String, local_path: String) -> CommandResult {
+    run_container_cmd_async(vec!["cp".into(), format!("{}:{}", id, container_path), local_path]).await
+}
+
+#[tauri::command]
+async fn copy_to_container(id: String, local_path: String, container_path: String) -> CommandResult {
+    run_container_cmd_async(vec!["cp".into(), local_path, format!("{}:{}", id, container_path)]).await
+}
+
+#[tauri::command]
+async fn export_container(id: String, output: Option<String>) -> CommandResult {
+    let mut args: Vec<String> = vec!["export".into()];
+    if let Some(o) = output {
+        args.push("-o".into());
+        args.push(o);
+    }
+    args.push(id);
     run_container_cmd_async(args).await
 }
 
@@ -429,6 +726,30 @@ async fn tag_image(source: String, target: String) -> CommandResult {
 }
 
 #[tauri::command]
+async fn save_image(reference: String, output: Option<String>) -> CommandResult {
+    let mut args: Vec<String> = vec!["image".into(), "save".into()];
+    if let Some(o) = output {
+        args.push("-o".into());
+        args.push(o);
+    }
+    args.push(reference);
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn load_image(input: Option<String>, force: bool) -> CommandResult {
+    let mut args: Vec<String> = vec!["image".into(), "load".into()];
+    if let Some(i) = input {
+        args.push("-i".into());
+        args.push(i);
+    }
+    if force {
+        args.push("-f".into());
+    }
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
 async fn prune_images(all: bool) -> CommandResult {
     let mut args: Vec<String> = vec!["image".into(), "prune".into()];
     if all {
@@ -445,11 +766,23 @@ async fn list_volumes() -> CommandResult {
 }
 
 #[tauri::command]
-async fn create_volume(name: String, size: Option<String>) -> CommandResult {
+async fn create_volume(name: String, size: Option<String>, labels: Option<String>, opts: Option<String>) -> CommandResult {
     let mut args: Vec<String> = vec!["volume".into(), "create".into()];
     if let Some(s) = size {
         args.push("-s".into());
         args.push(s);
+    }
+    if let Some(l) = labels {
+        for label in l.split(',') {
+            args.push("--label".into());
+            args.push(label.trim().to_string());
+        }
+    }
+    if let Some(o) = opts {
+        for opt in o.split(',') {
+            args.push("--opt".into());
+            args.push(opt.trim().to_string());
+        }
     }
     args.push(name);
     run_container_cmd_async(args).await
@@ -483,6 +816,9 @@ async fn create_network(
     subnet: Option<String>,
     subnet_v6: Option<String>,
     internal: bool,
+    labels: Option<String>,
+    options: Option<String>,
+    plugin: Option<String>,
 ) -> CommandResult {
     let mut args: Vec<String> = vec!["network".into(), "create".into()];
     if internal {
@@ -495,6 +831,22 @@ async fn create_network(
     if let Some(sv6) = subnet_v6 {
         args.push("--subnet-v6".into());
         args.push(sv6);
+    }
+    if let Some(l) = labels {
+        for label in l.split(',') {
+            args.push("--label".into());
+            args.push(label.trim().to_string());
+        }
+    }
+    if let Some(o) = options {
+        for opt in o.split(',') {
+            args.push("--option".into());
+            args.push(opt.trim().to_string());
+        }
+    }
+    if let Some(p) = plugin {
+        args.push("--plugin".into());
+        args.push(p);
     }
     args.push(name);
     run_container_cmd_async(args).await
@@ -582,7 +934,18 @@ async fn list_machines() -> CommandResult {
 }
 
 #[tauri::command]
-async fn create_machine(image: String, name: Option<String>, cpus: Option<String>, memory: Option<String>) -> CommandResult {
+async fn create_machine(
+    image: String,
+    name: Option<String>,
+    cpus: Option<String>,
+    memory: Option<String>,
+    set_default: bool,
+    no_boot: bool,
+    home_mount: Option<String>,
+    arch: Option<String>,
+    os: Option<String>,
+    platform: Option<String>,
+) -> CommandResult {
     let mut args: Vec<String> = vec!["machine".into(), "create".into(), image];
     if let Some(n) = name {
         args.push("--name".into());
@@ -595,6 +958,28 @@ async fn create_machine(image: String, name: Option<String>, cpus: Option<String
     if let Some(m) = memory {
         args.push("--memory".into());
         args.push(m);
+    }
+    if set_default {
+        args.push("--set-default".into());
+    }
+    if no_boot {
+        args.push("--no-boot".into());
+    }
+    if let Some(hm) = home_mount {
+        args.push("--home-mount".into());
+        args.push(hm);
+    }
+    if let Some(a) = arch {
+        args.push("-a".into());
+        args.push(a);
+    }
+    if let Some(o) = os {
+        args.push("--os".into());
+        args.push(o);
+    }
+    if let Some(p) = platform {
+        args.push("--platform".into());
+        args.push(p);
     }
     run_container_cmd_async(args).await
 }
@@ -638,6 +1023,54 @@ async fn set_machine(name: String, settings: String) -> CommandResult {
 #[tauri::command]
 async fn set_default_machine(name: String) -> CommandResult {
     run_container_cmd_async(vec!["machine".into(), "set-default".into(), name]).await
+}
+
+#[tauri::command]
+async fn run_machine_command(name: String, command: Option<String>, root: bool) -> CommandResult {
+    let script = format!(
+        "tell application \"Terminal\"\n  activate\n  do script \"/usr/local/bin/container machine run {}-n {} {}\"\nend tell",
+        if root { "--root " } else { "" },
+        name,
+        command.unwrap_or_else(|| String::new())
+    );
+    match std::process::Command::new("osascript")
+        .args(["-e", leak(script)])
+        .output()
+    {
+        Ok(output) => CommandResult {
+            success: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        },
+        Err(e) => CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to open terminal: {e}"),
+        },
+    }
+}
+
+#[tauri::command]
+async fn system_df() -> CommandResult {
+    run_container_cmd_async(vec!["system".into(), "df".into(), "--format".into(), "json".into()]).await
+}
+
+#[tauri::command]
+async fn system_version() -> CommandResult {
+    run_container_cmd_async(vec!["--version".into()]).await
+}
+
+#[tauri::command]
+async fn system_logs(follow: bool, last: Option<String>) -> CommandResult {
+    let mut args: Vec<String> = vec!["system".into(), "logs".into()];
+    if follow {
+        args.push("-f".into());
+    }
+    if let Some(l) = last {
+        args.push("--last".into());
+        args.push(l);
+    }
+    run_container_cmd_async(args).await
 }
 
 // ==================== Raw Command Execution ====================
@@ -700,8 +1133,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             system_start,
             system_stop,
+            system_df,
+            system_version,
+            system_logs,
             list_containers,
             run_container,
+            create_container,
             stop_container,
             start_container,
             delete_container,
@@ -713,6 +1150,9 @@ pub fn run() {
             open_container_logs,
             get_container_stats,
             prune_containers,
+            copy_from_container,
+            copy_to_container,
+            export_container,
             list_images,
             pull_image,
             push_image,
@@ -720,6 +1160,8 @@ pub fn run() {
             inspect_image,
             build_image,
             tag_image,
+            save_image,
+            load_image,
             prune_images,
             list_volumes,
             create_volume,
@@ -743,6 +1185,7 @@ pub fn run() {
             machine_logs,
             set_machine,
             set_default_machine,
+            run_machine_command,
             run_raw_command,
         ])
         .setup(|app| {
