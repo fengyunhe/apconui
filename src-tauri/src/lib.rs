@@ -574,6 +574,72 @@ async fn registry_list() -> CommandResult {
     run_container_cmd_async(vec!["registry".into(), "list".into(), "--format".into(), "json".into()]).await
 }
 
+// ==================== Machine Commands ====================
+
+#[tauri::command]
+async fn list_machines() -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "ls".into(), "--format".into(), "json".into()]).await
+}
+
+#[tauri::command]
+async fn create_machine(image: String, name: Option<String>, cpus: Option<String>, memory: Option<String>) -> CommandResult {
+    let mut args: Vec<String> = vec!["machine".into(), "create".into(), image];
+    if let Some(n) = name {
+        args.push("--name".into());
+        args.push(n);
+    }
+    if let Some(c) = cpus {
+        args.push("--cpus".into());
+        args.push(c);
+    }
+    if let Some(m) = memory {
+        args.push("--memory".into());
+        args.push(m);
+    }
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn delete_machine(name: String, force: bool) -> CommandResult {
+    let mut args: Vec<String> = vec!["machine".into(), "rm".into()];
+    if force {
+        args.push("-f".into());
+    }
+    args.push(name);
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn start_machine(name: String) -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "run".into(), "-n".into(), name, "--".into(), "true".into()]).await
+}
+
+#[tauri::command]
+async fn stop_machine(name: String) -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "stop".into(), name]).await
+}
+
+#[tauri::command]
+async fn inspect_machine(name: String) -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "inspect".into(), name]).await
+}
+
+#[tauri::command]
+async fn machine_logs(name: String) -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "logs".into(), name]).await
+}
+
+#[tauri::command]
+async fn set_machine(name: String, settings: String) -> CommandResult {
+    let args: Vec<String> = vec!["machine".into(), "set".into(), "-n".into(), name, settings];
+    run_container_cmd_async(args).await
+}
+
+#[tauri::command]
+async fn set_default_machine(name: String) -> CommandResult {
+    run_container_cmd_async(vec!["machine".into(), "set-default".into(), name]).await
+}
+
 // ==================== Raw Command Execution ====================
 
 #[tauri::command]
@@ -668,6 +734,15 @@ pub fn run() {
             registry_login,
             registry_logout,
             registry_list,
+            list_machines,
+            create_machine,
+            delete_machine,
+            start_machine,
+            stop_machine,
+            inspect_machine,
+            machine_logs,
+            set_machine,
+            set_default_machine,
             run_raw_command,
         ])
         .setup(|app| {

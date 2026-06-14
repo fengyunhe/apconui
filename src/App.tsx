@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
-type Tab = "containers" | "images" | "volumes" | "networks";
+type Tab = "containers" | "images" | "volumes" | "networks" | "machines";
 
 interface RawContainer {
   configuration: {
@@ -89,6 +89,16 @@ interface Network {
   name: string;
   state: string;
   subnet: string;
+}
+
+interface Machine {
+  id: string;
+  status: string;
+  cpus: number;
+  memory: number;
+  diskSize: number;
+  createdDate: string;
+  isDefault: boolean;
 }
 
 interface CommandResult {
@@ -184,11 +194,13 @@ function App() {
   const [images, setImages] = useState<Image[]>([]);
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [networks, setNetworks] = useState<Network[]>([]);
+  const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
   const [showBuildModal, setShowBuildModal] = useState(false);
   const [showCreateVolumeModal, setShowCreateVolumeModal] = useState(false);
   const [showCreateNetworkModal, setShowCreateNetworkModal] = useState(false);
+  const [showCreateMachineModal, setShowCreateMachineModal] = useState(false);
   const [showPullModal, setShowPullModal] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
 
@@ -283,9 +295,31 @@ function App() {
     }
   }, []);
 
+  const refreshMachines = useCallback(async () => {
+    try {
+      const result = await invoke<CommandResult>("list_machines");
+      if (result.success && result.stdout.trim()) {
+        const raw = parseJsonArray<{ id: string; status: string; cpus: number; memory: number; diskSize: number; createdDate: string; default: boolean }>(result.stdout);
+        setMachines(raw.map((m) => ({
+          id: m.id || "",
+          status: m.status || "unknown",
+          cpus: m.cpus || 0,
+          memory: m.memory || 0,
+          diskSize: m.diskSize || 0,
+          createdDate: m.createdDate?.split("T")[0] || "",
+          isDefault: m.default || false,
+        })));
+      } else {
+        setMachines([]);
+      }
+    } catch {
+      setMachines([]);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshContainers(), refreshImages(), refreshVolumes(), refreshNetworks()]);
-  }, [refreshContainers, refreshImages, refreshVolumes, refreshNetworks]);
+    await Promise.all([refreshContainers(), refreshImages(), refreshVolumes(), refreshNetworks(), refreshMachines()]);
+  }, [refreshContainers, refreshImages, refreshVolumes, refreshNetworks, refreshMachines]);
 
   useEffect(() => {
     refreshAll();
@@ -397,6 +431,45 @@ function App() {
         refreshNetworks();
       } else {
         showToast("error", result.stderr || `Failed to ${action} network`);
+      }
+    } catch (e) {
+      showToast("error", String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMachineAction = async (action: string, name: string) => {
+    if (action === "delete" && !await confirm(`Delete machine ${name}? This cannot be undone.`)) return;
+    if (action === "stop" && !await confirm(`Stop machine ${name}?`)) return;
+    setLoading(true);
+    try {
+      let result: CommandResult;
+      switch (action) {
+        case "stop":
+          result = await invoke<CommandResult>("stop_machine", { name });
+          break;
+        case "start":
+          result = await invoke<CommandResult>("start_machine", { name });
+          break;
+        case "delete":
+          result = await invoke<CommandResult>("delete_machine", { name, force: true });
+          break;
+        case "inspect":
+          result = await invoke<CommandResult>("inspect_machine", { name });
+          if (result.success) {
+            try { setInspectData(JSON.stringify(JSON.parse(result.stdout), null, 2)); } catch { setInspectData(result.stdout); }
+            setShowInspectModal(true);
+          }
+          break;
+        default:
+          return;
+      }
+      if (result.success) {
+        showToast("success", `Machine ${action} succeeded`);
+        refreshMachines();
+      } else {
+        showToast("error", result.stderr || `Failed to ${action} machine`);
       }
     } catch (e) {
       showToast("error", String(e));
@@ -539,6 +612,15 @@ function App() {
             <span>Networks</span>
             <span className="badge">{networks.length}</span>
           </button>
+          <button className={`nav-item ${activeTab === "machines" ? "active" : ""}`} onClick={() => setActiveTab("machines")}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg>
+            <span>Machines</span>
+            <span className="badge">{machines.length}</span>
+          </button>
         </nav>
 
         <div className="sidebar-footer">
@@ -618,6 +700,19 @@ function App() {
             onRefresh={refreshNetworks}
             onCreate={() => setShowCreateNetworkModal(true)}
             onDelete={(name) => handleNetworkAction("delete", name)}
+          />
+        )}
+
+        {activeTab === "machines" && (
+          <MachinesTab
+            machines={machines}
+            loading={loading}
+            onRefresh={refreshMachines}
+            onCreate={() => setShowCreateMachineModal(true)}
+            onStart={(name) => handleMachineAction("start", name)}
+            onStop={(name) => handleMachineAction("stop", name)}
+            onDelete={(name) => handleMachineAction("delete", name)}
+            onInspect={(name) => handleMachineAction("inspect", name)}
           />
         )}
       </main>
@@ -743,6 +838,35 @@ function App() {
         />
       )}
 
+      {showCreateMachineModal && (
+        <CreateMachineModal
+          images={images}
+          onClose={() => setShowCreateMachineModal(false)}
+          onCreate={async (image, name, cpus, memory) => {
+            setLoading(true);
+            try {
+              const result = await invoke<CommandResult>("create_machine", {
+                image,
+                name: name || null,
+                cpus: cpus || null,
+                memory: memory || null,
+              });
+              if (result.success) {
+                showToast("success", "Machine created");
+                setShowCreateMachineModal(false);
+                refreshMachines();
+              } else {
+                showToast("error", result.stderr);
+              }
+            } catch (e) {
+              showToast("error", String(e));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+      )}
+
 
 
       {showInspectModal && (
@@ -783,6 +907,17 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
   onExec: (id: string) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState<string>("all");
+
+  const filteredContainers = containers.filter((c) => {
+    const matchText = filter === "" ||
+      c.id.toLowerCase().includes(filter.toLowerCase()) ||
+      c.image.toLowerCase().includes(filter.toLowerCase()) ||
+      c.ip.toLowerCase().includes(filter.toLowerCase());
+    const matchState = stateFilter === "all" || c.state === stateFilter;
+    return matchText && matchState;
+  });
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -794,10 +929,10 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
   };
 
   const toggleAll = () => {
-    if (selected.size === containers.length) {
+    if (selected.size === filteredContainers.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(containers.map((c) => c.id)));
+      setSelected(new Set(filteredContainers.map((c) => c.id)));
     }
   };
 
@@ -839,6 +974,24 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
               </button>
             </>
           )}
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Filter by ID, image, IP..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <select
+            className="filter-select"
+            value={stateFilter}
+            onChange={(e) => setStateFilter(e.target.value)}
+          >
+            <option value="all">All States</option>
+            <option value="running">Running</option>
+            <option value="exited">Exited</option>
+            <option value="created">Created</option>
+            <option value="paused">Paused</option>
+          </select>
           <button className="btn btn-primary" onClick={onRun}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5 3 19 12 5 21 5 3" />
@@ -861,7 +1014,7 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
               <th style={{ width: 40 }}>
                 <input
                   type="checkbox"
-                  checked={containers.length > 0 && selected.size === containers.length}
+                  checked={filteredContainers.length > 0 && selected.size === filteredContainers.length}
                   onChange={toggleAll}
                 />
               </th>
@@ -876,10 +1029,10 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
             </tr>
           </thead>
           <tbody>
-            {containers.length === 0 ? (
-              <tr><td colSpan={9} className="empty-row">No containers</td></tr>
+            {filteredContainers.length === 0 ? (
+              <tr><td colSpan={9} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
             ) : (
-              containers.map((c) => {
+              filteredContainers.map((c) => {
                 const statsDisplay = getStatsDisplay(c);
                 return (
                   <tr key={c.id} className={c.state === "running" ? "row-running" : ""}>
@@ -938,6 +1091,17 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [verbose, setVerbose] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const filteredImages = images.filter((img) => {
+    if (filter === "") return true;
+    const search = filter.toLowerCase();
+    return (
+      img.name.toLowerCase().includes(search) ||
+      img.tag.toLowerCase().includes(search) ||
+      img.digest.toLowerCase().includes(search)
+    );
+  });
 
   const toggleSelect = (name: string) => {
     setSelected((prev) => {
@@ -949,10 +1113,10 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
   };
 
   const toggleAll = () => {
-    if (selected.size === images.length) {
+    if (selected.size === filteredImages.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(images.map((img) => `${img.name}:${img.tag}`)));
+      setSelected(new Set(filteredImages.map((img) => `${img.name}:${img.tag}`)));
     }
   };
 
@@ -977,6 +1141,13 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
               Delete ({selected.size})
             </button>
           )}
+          <input
+            type="text"
+            className="filter-input"
+            placeholder="Filter by name, tag, digest..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
           <label className="toggle-label">
             <input
               type="checkbox"
@@ -1009,7 +1180,7 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
               <th style={{ width: 40 }}>
                 <input
                   type="checkbox"
-                  checked={images.length > 0 && selected.size === images.length}
+                  checked={filteredImages.length > 0 && selected.size === filteredImages.length}
                   onChange={toggleAll}
                 />
               </th>
@@ -1025,10 +1196,10 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
             </tr>
           </thead>
           <tbody>
-            {images.length === 0 ? (
-              <tr><td colSpan={verbose ? 10 : 7} className="empty-row">No images</td></tr>
+            {filteredImages.length === 0 ? (
+              <tr><td colSpan={verbose ? 10 : 7} className="empty-row">{images.length === 0 ? "No images" : "No match"}</td></tr>
             ) : (
-              images.map((img) => {
+              filteredImages.map((img) => {
                 const usingContainers = getContainersUsingImage(img.name, img.tag);
                 return (
                   <tr key={`${img.name}-${img.tag}`}>
@@ -1155,6 +1326,71 @@ function NetworksTab({ networks, loading, onRefresh, onCreate, onDelete }: {
                   <td>{n.subnet}</td>
                   <td className="cell-actions">
                     <button className="btn btn-xs btn-danger" onClick={() => onDelete(n.name)} title="Delete">Delete</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, onDelete, onInspect }: {
+  machines: Machine[];
+  loading: boolean;
+  onRefresh: () => void;
+  onCreate: () => void;
+  onStart: (name: string) => void;
+  onStop: (name: string) => void;
+  onDelete: (name: string) => void;
+  onInspect: (name: string) => void;
+}) {
+  return (
+    <div className="tab-content">
+      <div className="tab-header">
+        <h2>Machines</h2>
+        <div className="tab-actions">
+          <button className="btn btn-primary" onClick={onCreate}>Create</button>
+          <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>Refresh</button>
+        </div>
+      </div>
+      <div className="table-container">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>CPUs</th>
+              <th>Memory</th>
+              <th>Disk</th>
+              <th>Created</th>
+              <th>Default</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {machines.length === 0 ? (
+              <tr><td colSpan={8} className="empty-row">No machines</td></tr>
+            ) : (
+              machines.map((m) => (
+                <tr key={m.id} className={m.status === "running" ? "row-running" : ""}>
+                  <td className="cell-id">{m.id}</td>
+                  <td><span className={`status-badge status-${m.status}`}>{m.status}</span></td>
+                  <td>{m.cpus}</td>
+                  <td>{formatBytes(m.memory)}</td>
+                  <td>{formatBytes(m.diskSize)}</td>
+                  <td>{m.createdDate}</td>
+                  <td>{m.isDefault ? <span className="badge badge-info">default</span> : "-"}</td>
+                  <td className="cell-actions">
+                    {m.status === "running" ? (
+                      <button className="btn btn-xs btn-warning" onClick={() => onStop(m.id)} title="Stop">Stop</button>
+                    ) : (
+                      <button className="btn btn-xs btn-success" onClick={() => onStart(m.id)} title="Start">Start</button>
+                    )}
+                    <button className="btn btn-xs btn-secondary" onClick={() => onInspect(m.id)} title="Inspect">Inspect</button>
+                    <button className="btn btn-xs btn-danger" onClick={() => onDelete(m.id)} title="Delete">Delete</button>
                   </td>
                 </tr>
               ))
@@ -1401,6 +1637,50 @@ function CreateNetworkModal({ onClose, onCreate }: {
       <div className="modal-actions">
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button className="btn btn-primary" onClick={() => onCreate(name, subnet)} disabled={!name}>Create</button>
+      </div>
+    </Modal>
+  );
+}
+
+function CreateMachineModal({ images, onClose, onCreate }: {
+  images: Image[];
+  onClose: () => void;
+  onCreate: (image: string, name: string, cpus: string, memory: string) => void;
+}) {
+  const [image, setImage] = useState(images[0] ? `${images[0].name}:${images[0].tag}` : "");
+  const [name, setName] = useState("");
+  const [cpus, setCpus] = useState("");
+  const [memory, setMemory] = useState("");
+  return (
+    <Modal onClose={onClose}>
+      <h2>Create Machine</h2>
+      <div className="form-grid">
+        <div className="form-group">
+          <label>Image</label>
+          <select value={image} onChange={(e) => setImage(e.target.value)}>
+            {images.map((img) => (
+              <option key={`${img.name}:${img.tag}`} value={`${img.name}:${img.tag}`}>
+                {img.name}:{img.tag}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Name (optional)</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-machine" />
+        </div>
+        <div className="form-group">
+          <label>CPUs (optional)</label>
+          <input value={cpus} onChange={(e) => setCpus(e.target.value)} placeholder="2" />
+        </div>
+        <div className="form-group">
+          <label>Memory (optional)</label>
+          <input value={memory} onChange={(e) => setMemory(e.target.value)} placeholder="4G" />
+        </div>
+      </div>
+      <div className="modal-actions">
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={() => onCreate(image, name, cpus, memory)} disabled={!image}>Create</button>
       </div>
     </Modal>
   );
