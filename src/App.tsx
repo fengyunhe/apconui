@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 
 type Tab = "containers" | "images" | "volumes" | "networks";
@@ -29,9 +30,15 @@ interface Container {
 interface RawImage {
   configuration: {
     name: string;
+    creationDate?: string;
     descriptor?: { size?: number };
   };
   id: string;
+  variants?: Array<{
+    size?: number;
+    platform?: { architecture?: string; os?: string };
+    config?: { config?: { Cmd?: string[]; Entrypoint?: string[] } };
+  }>;
 }
 
 interface Image {
@@ -39,6 +46,9 @@ interface Image {
   tag: string;
   digest: string;
   size: string;
+  created?: string;
+  architectures?: string[];
+  cmd?: string[];
 }
 
 interface ContainerStats {
@@ -121,12 +131,33 @@ function mapImages(raw: RawImage[]): Image[] {
     const colonIdx = tagPart.indexOf(":");
     const name = colonIdx >= 0 ? tagPart.substring(0, colonIdx) : tagPart;
     const tag = colonIdx >= 0 ? tagPart.substring(colonIdx + 1) : "latest";
-    const sizeBytes = img.configuration.descriptor?.size || 0;
+
+    let totalSize = 0;
+    const archSet = new Set<string>();
+    let cmd: string[] | undefined;
+
+    if (img.variants && img.variants.length > 0) {
+      for (const v of img.variants) {
+        totalSize += v.size || 0;
+        if (v.platform?.architecture && v.platform.architecture !== "unknown") {
+          archSet.add(v.platform.architecture);
+        }
+        if (!cmd && v.config?.config?.Cmd && v.config.config.Cmd.length > 0) {
+          cmd = v.config.config.Cmd;
+        }
+      }
+    } else {
+      totalSize = img.configuration.descriptor?.size || 0;
+    }
+
     return {
       name: namePart ? `${namePart}/${name}` : name,
       tag,
       digest: img.id ? img.id.substring(0, 12) : "",
-      size: formatBytes(sizeBytes),
+      size: formatBytes(totalSize),
+      created: img.configuration.creationDate?.split("T")[0],
+      architectures: archSet.size > 0 ? Array.from(archSet) : undefined,
+      cmd,
     };
   });
 }
@@ -906,6 +937,7 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
   containers: Container[];
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [verbose, setVerbose] = useState(false);
 
   const toggleSelect = (name: string) => {
     setSelected((prev) => {
@@ -945,6 +977,14 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
               Delete ({selected.size})
             </button>
           )}
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={verbose}
+              onChange={(e) => setVerbose(e.target.checked)}
+            />
+            Verbose
+          </label>
           <button className="btn btn-primary" onClick={onPull}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
@@ -977,13 +1017,16 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
               <th>Tag</th>
               <th>Digest</th>
               <th>Size</th>
+              {verbose && <th>Created</th>}
+              {verbose && <th>Architectures</th>}
+              {verbose && <th>Cmd</th>}
               <th>Containers</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {images.length === 0 ? (
-              <tr><td colSpan={7} className="empty-row">No images</td></tr>
+              <tr><td colSpan={verbose ? 10 : 7} className="empty-row">No images</td></tr>
             ) : (
               images.map((img) => {
                 const usingContainers = getContainersUsingImage(img.name, img.tag);
@@ -1000,6 +1043,9 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
                     <td><span className="tag-badge">{img.tag}</span></td>
                     <td className="cell-digest">{img.digest}</td>
                     <td>{img.size}</td>
+                    {verbose && <td>{img.created || "-"}</td>}
+                    {verbose && <td>{img.architectures?.join(", ") || "-"}</td>}
+                    {verbose && <td className="cell-cmd">{img.cmd?.join(" ") || "-"}</td>}
                     <td>
                       {usingContainers.length > 0 ? (
                         <span className="badge badge-info">{usingContainers.length} running</span>
@@ -1247,21 +1293,60 @@ function BuildImageModal({ onClose, onBuild }: {
 
 function PullImageModal({ onClose, onPull }: {
   onClose: () => void;
-  onPull: (reference: string) => void;
+  onPull: (reference: string) => Promise<void>;
 }) {
   const [reference, setReference] = useState("");
+  const [progress, setProgress] = useState("");
+  const [pulling, setPulling] = useState(false);
+
+  useEffect(() => {
+    const unlistenProgress = listen<string>("pull-progress", (event) => {
+      setProgress(event.payload);
+    });
+    const unlistenComplete = listen<boolean>("pull-complete", () => {
+      setPulling(false);
+      setProgress("");
+    });
+    return () => {
+      unlistenProgress.then((fn) => fn());
+      unlistenComplete.then((fn) => fn());
+    };
+  }, []);
+
+  const handlePull = async () => {
+    setPulling(true);
+    setProgress("Starting pull...");
+    await onPull(reference);
+  };
+
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={() => { if (!pulling) onClose(); }}>
       <h2>Pull Image</h2>
       <div className="form-grid">
         <div className="form-group">
           <label>Image Reference</label>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="docker.io/library/nginx:latest" autoFocus />
+          <input
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="docker.io/library/nginx:latest"
+            autoFocus
+            disabled={pulling}
+          />
         </div>
       </div>
+      {pulling && (
+        <div className="pull-progress">
+          <div className="progress-bar">
+            <div className="progress-bar-indeterminate"></div>
+          </div>
+          <p className="progress-text">{progress || "Pulling..."}</p>
+        </div>
+      )}
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={() => onPull(reference)} disabled={!reference}>Pull</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={pulling}>Cancel</button>
+        <button className="btn btn-primary" onClick={handlePull} disabled={!reference || pulling}>
+          {pulling ? "Pulling..." : "Pull"}
+        </button>
       </div>
     </Modal>
   );

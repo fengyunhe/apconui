@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
-use std::io::Write;
-use std::process::Command;
-use tauri::Manager;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Command, Stdio};
+use tauri::{Emitter, Manager};
 
 fn log_to_file(msg: &str) {
     if let Ok(mut f) = OpenOptions::new()
@@ -298,8 +298,82 @@ async fn list_images() -> CommandResult {
 }
 
 #[tauri::command]
-async fn pull_image(reference: String) -> CommandResult {
-    run_container_cmd_async(vec!["image".into(), "pull".into(), reference]).await
+async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
+    let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
+    let ref_clone = reference.clone();
+
+    tokio::task::spawn_blocking(move || {
+        log_to_file(&format!("Pulling image: {}", ref_clone));
+
+        let mut child = match Command::new("/usr/local/bin/container")
+            .args(["image", "pull", &ref_clone])
+            .env("PATH", path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                return CommandResult {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: format!("Failed to spawn pull command: {e}"),
+                };
+            }
+        };
+
+        let stderr = child.stderr.take().unwrap();
+        let reader = BufReader::new(stderr);
+        let mut last_progress = String::new();
+
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    let line = line.trim().to_string();
+                    if line.is_empty() {
+                        continue;
+                    }
+
+                    if line.contains("error") || line.contains("Error") || line.contains("failed") {
+                        let _ = app.emit("pull-progress", &line);
+                        last_progress = line.clone();
+                    } else if line.contains("extracting") || line.contains("copying") || line.contains("Downloading") || line.contains("Extracting") {
+                        let _ = app.emit("pull-progress", &line);
+                        last_progress = line.clone();
+                    } else if line.contains("%") || line.contains("done") || line.contains("complete") {
+                        let _ = app.emit("pull-progress", &line);
+                        last_progress = line.clone();
+                    } else {
+                        let _ = app.emit("pull-progress", &line);
+                        last_progress = line.clone();
+                    }
+                }
+                Err(e) => {
+                    log_to_file(&format!("Error reading pull output: {e}"));
+                    break;
+                }
+            }
+        }
+
+        let status = child.wait().unwrap_or_else(|e| {
+            log_to_file(&format!("Error waiting for pull: {e}"));
+            std::process::ExitStatus::default()
+        });
+
+        let _ = app.emit("pull-complete", status.success());
+
+        CommandResult {
+            success: status.success(),
+            stdout: last_progress,
+            stderr: String::new(),
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
 }
 
 #[tauri::command]
