@@ -124,3 +124,9 @@ apconui/
 ## License
 
 MIT
+
+## Disclaimer
+
+本开源项目为个人开发者为方便操作 Apple Container 而开发的第三方工具，与 Apple 公司没有任何关系，非 Apple 公司出品。此工具不提供任何服务和保证，对于程序 BUG 或漏洞带来的损失不承担任何责任。使用本工具即表示您同意自行承担所有风险。
+
+This open-source project is a third-party tool developed by an individual developer for the convenience of operating Apple Container. It is not affiliated with, endorsed by, or connected to Apple Inc. in any way. This tool is provided "as is" without any warranty of any kind. The developer assumes no responsibility for any damages or losses arising from the use of this tool, including but not limited to bugs, vulnerabilities, or data loss. By using this tool, you agree to assume all risks.
