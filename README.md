@@ -1,73 +1,126 @@
-# React + TypeScript + Vite
+# Apple Container Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A native macOS desktop application for managing Apple Container, built with [Tauri](https://tauri.app/) v2, React, and TypeScript.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Container Management
+- List all containers with real-time status
+- Start, stop, delete, and kill containers
+- View container logs in Terminal.app
+- Execute shell commands in running containers
+- View resource usage (CPU, Memory, Block I/O)
+- Batch operations (select multiple containers)
+- Filter by ID, image name, IP, or state
 
-## React Compiler
+### Image Management
+- List all container images with size information
+- Pull images with progress indicator
+- Build images from Dockerfile
+- Delete images (with usage detection)
+- Verbose mode showing architectures and default commands
+- Filter by name, tag, or digest
+- Batch delete operations
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Volume Management
+- Create and delete volumes
+- View volume details and disk usage
 
-## Expanding the ESLint configuration
+### Network Management
+- Create and delete networks
+- View network configuration
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Machine Management
+- Create container machines with custom resources
+- Start, stop, and delete machines
+- View machine details (CPUs, memory, disk)
+- Inspect machine configuration
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Tech Stack
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- **Backend**: Rust with Tauri v2
+- **Frontend**: React 19 + TypeScript + Vite
+- **Styling**: Custom CSS with CSS variables
+- **Build**: Tauri CLI for native macOS app
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Prerequisites
+
+- macOS 15 or later
+- Apple Container installed (`/usr/local/bin/container`)
+- Node.js 20+
+- Rust toolchain
+- pnpm
+
+## Installation
+
+### From DMG (Recommended)
+
+Download the latest release from GitHub Releases and drag the app to your Applications folder.
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/apconui.git
+cd apconui
+
+# Install dependencies
+pnpm install
+
+# Start development mode
+pnpm dev
+
+# In another terminal, start Tauri
+cd src-tauri
+cargo run
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Build for Distribution
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# Build frontend
+pnpm build
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Build native app
+cd src-tauri
+cargo tauri build --bundles app
+
+# The app will be in target/release/bundle/macos/
 ```
+
+## Development
+
+The app uses a two-process architecture:
+
+1. **Frontend** (React): Runs in a webview, handles UI
+2. **Backend** (Rust/Tauri): Executes container commands, manages system interactions
+
+### Commands
+
+```bash
+pnpm dev          # Start Vite dev server
+pnpm build        # Build frontend for production
+pnpm lint         # Run ESLint
+cargo tauri build # Build native app
+```
+
+## Architecture
+
+```
+apconui/
+├── src/                  # React frontend
+│   ├── App.tsx          # Main application
+│   ├── App.css          # Styles
+│   └── main.tsx         # Entry point
+├── src-tauri/            # Rust backend
+│   ├── src/
+│   │   ├── lib.rs       # Tauri commands
+│   │   └── main.rs      # Entry point
+│   ├── Cargo.toml       # Rust dependencies
+│   └── tauri.conf.json  # Tauri configuration
+└── package.json
+```
+
+## License
+
+MIT
