@@ -1,4 +1,4 @@
-export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal";
+export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings";
 
 export interface RawContainer {
   configuration: {

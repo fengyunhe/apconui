@@ -111,18 +111,20 @@ export function ImageDetail({ data, loading, onBack, onTag, onPush }: ImageDetai
           </DetailSection>
         )}
 
-        {variants.length > 1 && (
+        {variants.length > 0 && (
           <DetailSection title={`Variants (${variants.length})`}>
             <div className="detail-layers">
               {variants.map((v, i) => {
                 const platform = (v.platform || {}) as Record<string, unknown>;
                 const vArch = (platform.architecture || "") as string;
                 const vOs = (platform.os || "") as string;
+                const vVariant = (platform.variant || "") as string;
                 const vSize = (v.size || 0) as number;
+                const platformStr = [vOs, vArch, vVariant].filter(Boolean).join("/");
                 return (
                   <div key={i} className="detail-layer">
                     <span className="detail-layer-num">#{i + 1}</span>
-                    <code className="detail-layer-id">{vOs}/{vArch} - {vSize ? formatBytes(vSize) : "-"}</code>
+                    <code className="detail-layer-id">{platformStr} - {vSize ? formatBytes(vSize) : "-"}</code>
                   </div>
                 );
               })}

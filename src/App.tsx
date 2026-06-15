@@ -15,6 +15,7 @@ import { VolumesTab } from "./components/VolumesTab";
 import { NetworksTab } from "./components/NetworksTab";
 import { MachinesTab } from "./components/MachinesTab";
 import { TerminalTab } from "./components/TerminalTab";
+import { SettingsTab } from "./components/SettingsTab";
 import { RunContainerModal } from "./components/RunContainerModal";
 import { BuildImageModal } from "./components/BuildImageModal";
 import { PullImageModal } from "./components/PullImageModal";
@@ -62,6 +63,13 @@ function App() {
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
+  const [dockerMode, setDockerMode] = useState(() => {
+    try {
+      return localStorage.getItem("docker-mode") === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const { toastMessage, showToast } = useToast();
   const { confirmDialog, confirm, cancelConfirm } = useConfirm();
@@ -395,7 +403,11 @@ function App() {
           />
         )}
 
-        {activeTab === "terminal" && <TerminalTab />}
+        {activeTab === "terminal" && (
+          <TerminalTab dockerMode={dockerMode} onDockerModeChange={setDockerMode} />
+        )}
+
+        {activeTab === "settings" && <SettingsTab />}
       </main>
 
       {showRunModal && (

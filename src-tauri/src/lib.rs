@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
+
+mod docker_proxy;
 
 fn log_to_file(msg: &str) {
     if let Ok(mut f) = OpenOptions::new()
@@ -32,6 +34,7 @@ async fn run_container_cmd_async(args: Vec<String>) -> CommandResult {
             .arg(&cmd)
             .args(&rest)
             .env("PATH", path)
+            .env("DOCKER_HOST", "unix:///tmp/docker.sock")
             .output();
 
         match output {
@@ -1073,7 +1076,752 @@ async fn system_logs(follow: bool, last: Option<String>) -> CommandResult {
     run_container_cmd_async(args).await
 }
 
+// ==================== Docker CLI Proxy ====================
+
+fn translate_docker_command(parts: &[String]) -> Vec<String> {
+    if parts.is_empty() || parts[0] != "docker" {
+        return parts.to_vec();
+    }
+
+    if parts.len() == 1 {
+        return vec!["container".into(), "--help".into()];
+    }
+
+    let subcmd = parts[1].as_str();
+    let rest = &parts[2..];
+
+    match subcmd {
+        "ps" => {
+            let mut args = vec!["ls".into()];
+            for arg in rest {
+                match arg.as_str() {
+                    "-a" | "--all" => args.push("--all".into()),
+                    "--no-trunc" => {}
+                    "-q" | "--quiet" => {}
+                    "-s" | "--size" => {}
+                    _ => {
+                        if arg.starts_with("--format") || arg.starts_with("--filter") || arg.starts_with("--limit") || arg.starts_with("--no-stream") {
+                            // skip docker-only flags
+                        } else {
+                            args.push(arg.clone());
+                        }
+                    }
+                }
+            }
+            args
+        }
+        "run" => {
+            let mut args = vec!["run".into()];
+            let mut i = 0;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "-d" | "--detach" => args.push("-d".into()),
+                    "--rm" => args.push("--rm".into()),
+                    "--name" => {
+                        args.push("--name".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-c" | "--cpus" => {
+                        args.push("-c".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-m" | "--memory" => {
+                        args.push("-m".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-p" | "--publish" => {
+                        args.push("-p".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-e" | "--env" => {
+                        args.push("-e".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-v" | "--volume" => {
+                        args.push("-v".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--network" => {
+                        args.push("--network".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--entrypoint" => {
+                        args.push("--entrypoint".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-w" | "--workdir" => {
+                        args.push("-w".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-u" | "--user" => {
+                        args.push("-u".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-it" => { args.push("-i".into()); args.push("-t".into()); }
+                    "-i" | "--interactive" => args.push("-i".into()),
+                    "-t" | "--tty" => args.push("-t".into()),
+                    "--init" => args.push("--init".into()),
+                    "--read-only" => args.push("--read-only".into()),
+                    "--restart" => { i += 1; } // skip docker-only restart policy
+                    "--network-alias" | "--network-aliases" => { i += 1; }
+                    "--expose" => { i += 1; }
+                    "--hostname" => { i += 1; }
+                    "--domainname" | "--dns-search" => { i += 1; }
+                    "--add-host" => { i += 1; }
+                    "--label" | "-l" => { i += 1; }
+                    "--shm-size" => { i += 1; }
+                    "--tmpfs" => {
+                        args.push("--tmpfs".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--ulimit" => { i += 1; }
+                    "--cap-add" => {
+                        args.push("--cap-add".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--cap-drop" => {
+                        args.push("--cap-drop".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--dns" => {
+                        args.push("--dns".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--platform" => {
+                        args.push("--platform".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--no-cache" => args.push("--no-cache".into()),
+                    "--pull" => { i += 1; }
+                    _ => args.push(rest[i].clone()),
+                }
+                i += 1;
+            }
+            args
+        }
+        "stop" => {
+            let mut args = vec!["stop".into()];
+            let mut i = 0;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "-t" | "--time" => {
+                        args.push("-t".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    _ => args.push(rest[i].clone()),
+                }
+                i += 1;
+            }
+            args
+        }
+        "start" => {
+            let mut args = vec!["start".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "restart" => {
+            let mut args = vec!["stop".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "rm" => {
+            let mut args = vec!["rm".into()];
+            for arg in rest {
+                match arg.as_str() {
+                    "-f" | "--force" => args.push("-f".into()),
+                    "-v" | "--volumes" => {} // container rm doesn't support -v
+                    _ => args.push(arg.clone()),
+                }
+            }
+            args
+        }
+        "rmi" | "image" => {
+            if subcmd == "rmi" {
+                let mut args = vec!["image".into(), "rm".into()];
+                for arg in rest {
+                    match arg.as_str() {
+                        "-f" | "--force" => args.push("-f".into()),
+                        _ => args.push(arg.clone()),
+                    }
+                }
+                args
+            } else {
+                let mut args = vec!["image".into()];
+                args.extend(rest.iter().cloned());
+                args
+            }
+        }
+        "images" => {
+            let mut args = vec!["image".into(), "ls".into(), "--format".into(), "json".into()];
+            for arg in rest {
+                if !arg.starts_with('-') {
+                    args.push(arg.clone());
+                }
+            }
+            args
+        }
+        "pull" => {
+            let mut args = vec!["image".into(), "pull".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "push" => {
+            let mut args = vec!["image".into(), "push".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "tag" => {
+            let mut args = vec!["image".into(), "tag".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "build" => {
+            let mut args = vec!["build".into()];
+            let mut i = 0;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "-t" | "--tag" => {
+                        args.push("-t".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-f" | "--file" => {
+                        args.push("-f".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "--no-cache" => args.push("--no-cache".into()),
+                    "--build-arg" => {
+                        args.push("--build-arg".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    _ => args.push(rest[i].clone()),
+                }
+                i += 1;
+            }
+            args
+        }
+        "exec" => {
+            let mut args = vec!["exec".into()];
+            let mut i = 0;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "-it" => { args.push("-i".into()); args.push("-t".into()); }
+                    "-i" | "--interactive" => args.push("-i".into()),
+                    "-t" | "--tty" => args.push("-t".into()),
+                    "-d" | "--detach" => {}
+                    "-w" | "--workdir" => {
+                        args.push("-w".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    "-u" | "--user" => {
+                        args.push("-u".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    _ => args.push(rest[i].clone()),
+                }
+                i += 1;
+            }
+            args
+        }
+        "logs" => {
+            let mut args = vec!["logs".into()];
+            for arg in rest {
+                match arg.as_str() {
+                    "-f" | "--follow" => args.push("-f".into()),
+                    "-n" | "--tail" => {} // skip docker-only
+                    "--since" => {} // skip docker-only
+                    _ => {
+                        if let Some(n) = arg.strip_prefix("--tail=") {
+                            args.push("-n".into());
+                            args.push(n.to_string());
+                        } else if arg.starts_with('-') {
+                            // skip unknown flags
+                        } else {
+                            args.push(arg.clone());
+                        }
+                    }
+                }
+            }
+            args
+        }
+        "inspect" => {
+            let mut args = vec!["inspect".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "cp" => {
+            let mut args = vec!["cp".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "export" => {
+            let mut args = vec!["export".into()];
+            for arg in rest {
+                match arg.as_str() {
+                    "-o" | "--output" => {} // skip
+                    _ => args.push(arg.clone()),
+                }
+            }
+            args
+        }
+        "kill" => {
+            let mut args = vec!["kill".into()];
+            let mut i = 0;
+            while i < rest.len() {
+                match rest[i].as_str() {
+                    "-s" | "--signal" => {
+                        args.push("-s".into());
+                        if i + 1 < rest.len() { i += 1; args.push(rest[i].clone()); }
+                    }
+                    _ => args.push(rest[i].clone()),
+                }
+                i += 1;
+            }
+            args
+        }
+        "stats" => {
+            let mut args = vec!["stats".into(), "--format".into(), "json".into(), "--no-stream".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "volume" => {
+            let mut args = vec!["volume".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "network" => {
+            let mut args = vec!["network".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "system" => {
+            let mut args = vec!["system".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "machine" => {
+            let mut args = vec!["machine".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "info" => {
+            vec!["system".into(), "df".into(), "--format".into(), "json".into()]
+        }
+        "version" => {
+            vec!["--version".into()]
+        }
+        "login" => {
+            let mut args = vec!["registry".into(), "login".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        "logout" => {
+            let mut args = vec!["registry".into(), "logout".into()];
+            args.extend(rest.iter().cloned());
+            args
+        }
+        _ => {
+            let mut args = vec![];
+            args.extend(parts.iter().cloned());
+            args
+        }
+    }
+}
+
+// ==================== Docker Socket Path ====================
+
+#[tauri::command]
+fn get_docker_socket_path(app: tauri::AppHandle) -> String {
+    let socket_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    socket_dir.join("docker.sock").to_string_lossy().to_string()
+}
+
+// ==================== Socktainer Management ====================
+
+const SOCKTAINER_BIN: &str = "/opt/socktainer/bin/socktainer";
+const SOCKTAINER_SOCKET: &str = "/Users/yan.yang/.socktainer/container.sock";
+
+#[tauri::command]
+fn is_socktainer_installed() -> bool {
+    std::path::Path::new(SOCKTAINER_BIN).exists()
+}
+
+#[tauri::command]
+fn is_socktainer_running() -> bool {
+    std::process::Command::new("pgrep")
+        .arg("-f")
+        .arg("socktainer")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn start_socktainer() -> CommandResult {
+    if !std::path::Path::new(SOCKTAINER_BIN).exists() {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Socktainer not installed at /opt/socktainer/bin/socktainer".to_string(),
+        };
+    }
+
+    // Check if already running
+    if is_socktainer_running() {
+        return CommandResult {
+            success: true,
+            stdout: "Socktainer already running".to_string(),
+            stderr: String::new(),
+        };
+    }
+
+    // Start socktainer in background
+    match std::process::Command::new(SOCKTAINER_BIN)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(_) => {
+            // Wait a bit for socket to be created
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if std::path::Path::new(SOCKTAINER_SOCKET).exists() {
+                CommandResult {
+                    success: true,
+                    stdout: format!("Socktainer started, socket at {SOCKTAINER_SOCKET}"),
+                    stderr: String::new(),
+                }
+            } else {
+                CommandResult {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "Socktainer started but socket not found".to_string(),
+                }
+            }
+        }
+        Err(e) => CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to start socktainer: {e}"),
+        },
+    }
+}
+
+#[tauri::command]
+fn stop_socktainer() -> CommandResult {
+    match std::process::Command::new("pkill")
+        .arg("-f")
+        .arg("socktainer")
+        .output()
+    {
+        Ok(_) => CommandResult {
+            success: true,
+            stdout: "Socktainer stopped".to_string(),
+            stderr: String::new(),
+        },
+        Err(e) => CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to stop socktainer: {e}"),
+        },
+    }
+}
+
+#[tauri::command]
+fn get_socktainer_socket_path() -> String {
+    SOCKTAINER_SOCKET.to_string()
+}
+
 // ==================== Raw Command Execution ====================
+
+fn format_docker_output(original_cmd: &str, result: &CommandResult) -> String {
+    if !result.success || result.stdout.trim().is_empty() {
+        return result.stdout.clone();
+    }
+
+    // Only format docker command outputs
+    if !original_cmd.starts_with("docker ") {
+        return result.stdout.clone();
+    }
+
+    let words: Vec<&str> = original_cmd.split_whitespace().collect();
+
+    // Detect the actual operation: docker images, docker image ls, docker ps, docker container ls, etc.
+    let is_images_cmd = words.contains(&"images")
+        || (words.contains(&"image") && words.contains(&"ls"));
+    let is_containers_cmd = words.contains(&"ps")
+        || (words.contains(&"container") && words.contains(&"ls"));
+    let is_version_cmd = words.contains(&"version");
+    let is_info_cmd = words.contains(&"info");
+
+    if is_images_cmd {
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&result.stdout) {
+            Ok(v) => v,
+            Err(_) => return result.stdout.clone(),
+        };
+        if raw_items.is_empty() {
+            return "REPOSITORY   TAG       IMAGE ID   CREATED   SIZE\n<none>       <none>    <none>     <none>    0B".to_string();
+        }
+
+        // Normalize Apple Container format to Docker-like format
+        let items: Vec<serde_json::Value> = raw_items.iter().map(|item| {
+            // Apple Container: {"id": "...", "configuration": {"name": "...", "creationDate": "...", "descriptor": {"size": ...}}, "variants": [...]}
+            // Docker: {"Id": "...", "RepoTags": ["..."], "Created": "...", "Size": ...}
+            let id = item.get("id").and_then(|v| v.as_str())
+                .or_else(|| item.get("Id").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            let name = item.get("configuration").and_then(|c| c.get("name")).and_then(|v| v.as_str())
+                .unwrap_or("").to_string();
+            let created = item.get("configuration").and_then(|c| c.get("creationDate")).and_then(|v| v.as_str())
+                .or_else(|| item.get("Created").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            // Size: sum from variants or use Size field
+            let size = item.get("Size").and_then(|v| v.as_u64()).unwrap_or_else(|| {
+                item.get("variants").and_then(|v| v.as_array()).map(|variants| {
+                    variants.iter().filter_map(|v| v.get("size").and_then(|s| s.as_u64())).sum()
+                }).unwrap_or(0)
+            });
+
+            let repo_tags = if !name.is_empty() {
+                serde_json::json!([name])
+            } else if let Some(tags) = item.get("RepoTags") {
+                tags.clone()
+            } else {
+                serde_json::json!([])
+            };
+
+            serde_json::json!({
+                "Id": id,
+                "RepoTags": repo_tags,
+                "Created": created,
+                "Size": size,
+            })
+        }).collect();
+
+        let mut out = String::new();
+        out.push_str(&format!("{:<13} {:<9} {:<11} {:<9} {:<10}\n", "REPOSITORY", "TAG", "IMAGE ID", "CREATED", "SIZE"));
+        for item in &items {
+            let tags = item.get("RepoTags").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let id = item.get("Id").and_then(|v| v.as_str()).unwrap_or("<none>");
+            let short_id = if id.len() > 12 { &id[..12] } else { id };
+            let created = format_timestamp_from_value(item.get("Created").unwrap_or(&serde_json::Value::Null));
+            let size = item.get("Size").and_then(|v| v.as_u64()).unwrap_or(0);
+            let size_str = format_size(size);
+
+            if tags.is_empty() {
+                out.push_str(&format!("{:<13} {:<9} {:<11} {:<9} {:<10}\n", "<none>", "<none>", short_id, created, size_str));
+            } else {
+                for tag in &tags {
+                    let tag_str = tag.as_str().unwrap_or("<none>");
+                    let parts: Vec<&str> = tag_str.splitn(2, ':').collect();
+                    let repo = parts.get(0).unwrap_or(&"<none>");
+                    let tag_name = parts.get(1).unwrap_or(&"latest");
+                    out.push_str(&format!("{:<13} {:<9} {:<11} {:<9} {:<10}\n", repo, tag_name, short_id, created, size_str));
+                }
+            }
+        }
+        out
+    } else if is_containers_cmd {
+        let raw_items: Vec<serde_json::Value> = match serde_json::from_str(&result.stdout) {
+            Ok(v) => v,
+            Err(_) => return result.stdout.clone(),
+        };
+        if raw_items.is_empty() {
+            return "CONTAINER ID   IMAGE   COMMAND   CREATED   STATUS   PORTS   NAMES\n".to_string();
+        }
+
+        // Normalize Apple Container format
+        let items: Vec<serde_json::Value> = raw_items.iter().map(|item| {
+            let id = item.get("id").and_then(|v| v.as_str())
+                .or_else(|| item.get("Id").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            let image = item.get("configuration").and_then(|c| c.get("image")).and_then(|i| i.get("reference")).and_then(|v| v.as_str())
+                .or_else(|| item.get("Image").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            let state = item.get("status").and_then(|s| s.get("state")).and_then(|v| v.as_str())
+                .or_else(|| item.get("State").and_then(|v| v.as_str()))
+                .unwrap_or("unknown").to_string();
+            let created = item.get("configuration").and_then(|c| c.get("creationDate")).and_then(|v| v.as_str())
+                .or_else(|| item.get("Created").and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+            let names = item.get("status").and_then(|s| s.get("networks")).and_then(|n| n.get(0)).and_then(|n| n.get("hostname")).and_then(|v| v.as_str())
+                .or_else(|| item.get("Names").and_then(|n| n.get(0)).and_then(|v| v.as_str()))
+                .unwrap_or("").to_string();
+
+            let status = match state.as_str() {
+                "running" => format!("Up"),
+                "stopped" => "Exited".to_string(),
+                s => s.to_string(),
+            };
+
+            serde_json::json!({
+                "Id": id,
+                "Image": image,
+                "State": state,
+                "Status": status,
+                "Created": created,
+                "Names": [if names.starts_with('/') { &names[1..] } else { &names }],
+            })
+        }).collect();
+
+        let mut out = String::new();
+        out.push_str(&format!("{:<14} {:<20} {:<20} {:<20} {:<10}\n", "CONTAINER ID", "IMAGE", "STATUS", "CREATED", "NAMES"));
+        for item in &items {
+            let id = item.get("Id").and_then(|v| v.as_str()).unwrap_or("");
+            let short_id = if id.len() > 12 { &id[..12] } else { id };
+            let names = item.get("Names").and_then(|v| v.as_array())
+                .and_then(|a| a.get(0)).and_then(|v| v.as_str()).unwrap_or("");
+            let image = item.get("Image").and_then(|v| v.as_str()).unwrap_or("");
+            let status = item.get("Status").and_then(|v| v.as_str()).unwrap_or("");
+            let created = format_timestamp_from_value(item.get("Created").unwrap_or(&serde_json::Value::Null));
+            out.push_str(&format!("{:<14} {:<20} {:<20} {:<20} {:<10}\n", short_id, image, status, created, names));
+        }
+        out
+    } else if is_version_cmd {
+        let data: serde_json::Value = match serde_json::from_str(&result.stdout) {
+            Ok(v) => v,
+            Err(_) => return result.stdout.clone(),
+        };
+        let version = data.get("Version").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let api = data.get("ApiVersion").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let os = data.get("Os").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let arch = data.get("Arch").and_then(|v| v.as_str()).unwrap_or("unknown");
+        format!("Client: Docker Engine - Apple Container\n Version:           {version}\n API version:       {api}\n\nServer: Apple Container\n Version:           {version}\n API version:       {api}\n OS/Arch:           {os}/{arch}\n")
+    } else if is_info_cmd {
+        let data: serde_json::Value = match serde_json::from_str(&result.stdout) {
+            Ok(v) => v,
+            Err(_) => return result.stdout.clone(),
+        };
+        let server = data.get("ServerVersion").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let driver = data.get("Driver").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let arch = data.get("Architecture").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let containers = data.get("Containers").and_then(|v| v.as_u64()).unwrap_or(0);
+        let images = data.get("Images").and_then(|v| v.as_u64()).unwrap_or(0);
+        format!("Server Version: {server}\nStorage Driver: {driver}\nArchitecture: {arch}\nContainers: {containers}\nImages: {images}\n")
+    } else {
+        result.stdout.clone()
+    }
+}
+
+fn format_size(bytes: u64) -> String {
+    if bytes >= 1_073_741_824 {
+        format!("{:.2} GB", bytes as f64 / 1_073_741_824.0)
+    } else if bytes >= 1_048_576 {
+        format!("{:.2} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.2} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
+
+fn format_timestamp(created: &str) -> String {
+    // Handle Unix timestamp (number as string)
+    if let Ok(ts) = created.parse::<i64>() {
+        // Convert Unix timestamp to date string
+        let date = chrono::DateTime::from_timestamp(ts, 0)
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| created.to_string());
+        return date;
+    }
+    // Handle ISO string - just take first 10 chars
+    if created.len() > 10 {
+        created[..10].to_string()
+    } else {
+        created.to_string()
+    }
+}
+
+fn format_timestamp_from_value(val: &serde_json::Value) -> String {
+    match val {
+        serde_json::Value::Number(n) => {
+            if let Some(ts) = n.as_i64() {
+                chrono::DateTime::from_timestamp(ts, 0)
+                    .map(|d| d.format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| n.to_string())
+            } else {
+                n.to_string()
+            }
+        }
+        serde_json::Value::String(s) => format_timestamp(s),
+        _ => String::new(),
+    }
+}
+
+// ==================== Socktainer Direct Query ====================
+
+fn query_socktainer_path(parts: &[String]) -> Option<String> {
+    if parts.len() < 2 {
+        return None;
+    }
+    let subcmd = parts[1].as_str();
+    match subcmd {
+        "ps" => Some("/containers/json?all=true".to_string()),
+        "images" => Some("/images/json".to_string()),
+        "version" => Some("/version".to_string()),
+        "info" => Some("/info".to_string()),
+        "inspect" if parts.len() >= 3 => Some(format!("/containers/{}/json", parts[2])),
+        "logs" if parts.len() >= 3 => Some(format!("/containers/{}/logs?stdout=true&stderr=true", parts[2])),
+        "stats" => Some("/containers/json".to_string()),
+        "volume" if parts.len() >= 3 && parts[2] == "ls" => Some("/volumes".to_string()),
+        "network" if parts.len() >= 3 && parts[2] == "ls" => Some("/networks".to_string()),
+        "system" if parts.len() >= 3 && parts[2] == "df" => Some("/system/df".to_string()),
+        _ => None,
+    }
+}
+
+async fn query_socktainer_api(api_path: &str) -> CommandResult {
+    let socket_path = SOCKTAINER_SOCKET.to_string();
+    let api_path = api_path.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        log_to_file(&format!("Querying Socktainer: {api_path}"));
+        // Connect to Unix socket and send HTTP request
+        match std::os::unix::net::UnixStream::connect(&socket_path) {
+            Ok(stream) => {
+                use std::io::Write;
+                let mut stream = stream;
+                let request = format!("GET {api_path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+                if stream.write_all(request.as_bytes()).is_err() {
+                    return CommandResult {
+                        success: false,
+                        stdout: String::new(),
+                        stderr: "Failed to write to Socktainer socket".to_string(),
+                    };
+                }
+                let mut response = String::new();
+                if stream.read_to_string(&mut response).is_ok() {
+                    // Extract body from HTTP response
+                    let body = if let Some(pos) = response.find("\r\n\r\n") {
+                        response[pos + 4..].to_string()
+                    } else {
+                        response
+                    };
+                    CommandResult {
+                        success: true,
+                        stdout: body,
+                        stderr: String::new(),
+                    }
+                } else {
+                    CommandResult {
+                        success: false,
+                        stdout: String::new(),
+                        stderr: "Failed to read from Socktainer socket".to_string(),
+                    }
+                }
+            }
+            Err(e) => CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to connect to Socktainer: {e}"),
+            },
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
+}
 
 #[tauri::command]
 async fn run_raw_command(command: String) -> CommandResult {
@@ -1085,7 +1833,54 @@ async fn run_raw_command(command: String) -> CommandResult {
             stderr: "Empty command".to_string(),
         };
     }
-    run_container_cmd_async(parts).await
+
+    let is_docker = parts[0] == "docker";
+
+    // If docker command and Socktainer is running, query Socktainer directly via HTTP
+    if is_docker && is_socktainer_running() {
+        let path = query_socktainer_path(&parts);
+        if let Some(api_path) = path {
+            let mut result = query_socktainer_api(&api_path).await;
+            // Format the output like other docker commands
+            let formatted = format_docker_output(&command, &result);
+            result.stdout = formatted;
+            return result;
+        }
+        // Fallback if we can't map the command
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Socktainer is running but command '{}' is not yet supported via Socktainer", command),
+        };
+    }
+
+    // Translate Docker commands to Apple Container commands
+    let translated = if parts[0] == "docker" {
+        translate_docker_command(&parts)
+    } else if parts[0] == "container" {
+        // Strip "container" prefix, pass rest directly
+        parts[1..].to_vec()
+    } else {
+        parts
+    };
+
+    if translated.is_empty() {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Empty command after translation".to_string(),
+        };
+    }
+
+    let mut result = run_container_cmd_async(translated).await;
+
+    // Format docker command output for better readability
+    if is_docker {
+        let formatted = format_docker_output(&command, &result);
+        result.stdout = formatted;
+    }
+
+    result
 }
 
 fn ensure_container_system_running() -> bool {
@@ -1187,6 +1982,12 @@ pub fn run() {
             set_default_machine,
             run_machine_command,
             run_raw_command,
+            get_docker_socket_path,
+            is_socktainer_installed,
+            is_socktainer_running,
+            start_socktainer,
+            stop_socktainer,
+            get_socktainer_socket_path,
         ])
         .setup(|app| {
             log_to_file("Tauri setup called");
@@ -1195,6 +1996,23 @@ pub fn run() {
             } else {
                 log_to_file("WARNING: Main window not found");
             }
+            // Start Docker-compatible socket server in app data directory
+            let socket_dir = app.path().app_data_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let _ = std::fs::create_dir_all(&socket_dir);
+            let socket_path = socket_dir.join("docker.sock");
+            docker_proxy::start_docker_socket_server(&socket_path);
+
+            // Auto-start Socktainer if installed and not running
+            if is_socktainer_installed() && !is_socktainer_running() {
+                log_to_file("Socktainer detected, auto-starting...");
+                let result = start_socktainer();
+                log_to_file(&format!("Socktainer auto-start: {}", result.stdout));
+            } else if is_socktainer_running() {
+                log_to_file("Socktainer already running");
+            } else {
+                log_to_file("Socktainer not installed, skipping");
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())
