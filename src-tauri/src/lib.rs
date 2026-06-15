@@ -1713,37 +1713,53 @@ fn format_size(bytes: u64) -> String {
     }
 }
 
-fn format_timestamp(created: &str) -> String {
-    // Handle Unix timestamp (number as string)
-    if let Ok(ts) = created.parse::<i64>() {
-        // Convert Unix timestamp to date string
-        let date = chrono::DateTime::from_timestamp(ts, 0)
-            .map(|d| d.format("%Y-%m-%d").to_string())
-            .unwrap_or_else(|| created.to_string());
-        return date;
-    }
-    // Handle ISO string - just take first 10 chars
-    if created.len() > 10 {
-        created[..10].to_string()
-    } else {
-        created.to_string()
-    }
-}
-
 fn format_timestamp_from_value(val: &serde_json::Value) -> String {
     match val {
         serde_json::Value::Number(n) => {
             if let Some(ts) = n.as_i64() {
-                chrono::DateTime::from_timestamp(ts, 0)
-                    .map(|d| d.format("%Y-%m-%d").to_string())
-                    .unwrap_or_else(|| n.to_string())
+                // Convert Unix timestamp to date string using std
+                let secs = ts as u64;
+                let days = secs / 86400;
+
+                // Simple date calculation from Unix epoch (1970-01-01)
+                let mut year = 1970i64;
+                let mut remaining_days = days as i64;
+                loop {
+                    let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+                    if remaining_days < days_in_year {
+                        break;
+                    }
+                    remaining_days -= days_in_year;
+                    year += 1;
+                }
+                let month_days = if is_leap_year(year) {
+                    [31,29,31,30,31,30,31,31,30,31,30,31]
+                } else {
+                    [31,28,31,30,31,30,31,31,30,31,30,31]
+                };
+                let mut month = 1u32;
+                for &md in &month_days {
+                    if remaining_days < md as i64 {
+                        break;
+                    }
+                    remaining_days -= md as i64;
+                    month += 1;
+                }
+                let day = remaining_days + 1;
+                format!("{year}-{month:02}-{day:02}")
             } else {
                 n.to_string()
             }
         }
-        serde_json::Value::String(s) => format_timestamp(s),
+        serde_json::Value::String(s) => {
+            if s.len() > 10 { s[..10].to_string() } else { s.clone() }
+        }
         _ => String::new(),
     }
+}
+
+fn is_leap_year(year: i64) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
 }
 
 // ==================== Socktainer Direct Query ====================

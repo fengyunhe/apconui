@@ -7,6 +7,30 @@ use tokio::net::UnixListener;
 
 const DOCKER_API_VERSION: &str = "1.45";
 
+fn rand_u16() -> u16 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let s = RandomState::new();
+    let mut h = s.build_hasher();
+    h.write_u64(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64);
+    h.finish() as u16
+}
+
+fn rand_u48() -> u64 {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let s = RandomState::new();
+    let mut h = s.build_hasher();
+    h.write_u64(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64);
+    h.finish() & 0xFFFFFFFFFFFF
+}
+
 pub fn start_docker_socket_server(socket_path: &Path) {
     let socket_path = socket_path.to_path_buf();
     if socket_path.exists() {
@@ -658,7 +682,12 @@ async fn handle_info() -> (u16, &'static str, String) {
     let _result = run_cmd(vec!["system".into(), "df".into(), "--format".into(), "json".into()]).await;
 
     (200, "OK", json!({
-        "ID": uuid::Uuid::new_v4().to_string(),
+                "ID": format!("{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs() as u32,
+                    rand_u16(), rand_u16(), rand_u16(), rand_u48()),
         "Containers": 0,
         "ContainersRunning": 0,
         "ContainersStopped": 0,
