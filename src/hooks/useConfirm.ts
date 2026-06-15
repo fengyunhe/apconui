@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 export function useConfirm() {
   const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; message: string; onConfirm: () => void }>({
@@ -7,8 +7,11 @@ export function useConfirm() {
     onConfirm: () => {},
   });
 
+  const resolveRef = useRef<(value: boolean) => void>(() => {});
+
   const confirm = useCallback((message: string): Promise<boolean> => {
     return new Promise((resolve) => {
+      resolveRef.current = resolve;
       setConfirmDialog({
         show: true,
         message,
@@ -21,6 +24,7 @@ export function useConfirm() {
   }, []);
 
   const cancelConfirm = useCallback(() => {
+    resolveRef.current(false);
     setConfirmDialog({ show: false, message: "", onConfirm: () => {} });
   }, []);
 

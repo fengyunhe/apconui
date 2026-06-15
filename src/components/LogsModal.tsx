@@ -13,14 +13,15 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [lines, setLines] = useState("200");
   const logsRef = useRef<HTMLPreElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async (linesOverride?: string) => {
     setLoadingLogs(true);
     try {
       const result = await invoke<CommandResult>("get_container_logs", {
         id: containerId,
         follow: false,
-        lines: parseInt(lines) || null,
+        lines: parseInt(linesOverride ?? lines) || null,
       });
       setLogs(result.stdout || result.stderr || "(no logs)");
     } catch (e) {
@@ -32,7 +33,14 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
 
   useEffect(() => {
     fetchLogs();
-  }, [fetchLogs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerId]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   return (
     <Modal onClose={onClose}>
@@ -40,8 +48,13 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
       <div className="form-group" style={{ marginBottom: 12 }}>
         <label>Lines</label>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input value={lines} onChange={(e) => setLines(e.target.value)} style={{ width: 80 }} placeholder="200" />
-          <button className="btn btn-sm btn-secondary" onClick={fetchLogs} disabled={loadingLogs}>
+          <input value={lines} onChange={(e) => {
+            const val = e.target.value;
+            setLines(val);
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(() => fetchLogs(val), 500);
+          }} style={{ width: 80 }} placeholder="200" />
+          <button className="btn btn-sm btn-secondary" onClick={() => fetchLogs()} disabled={loadingLogs}>
             {loadingLogs ? "Loading..." : "Refresh"}
           </button>
         </div>

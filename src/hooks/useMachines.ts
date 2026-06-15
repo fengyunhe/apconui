@@ -62,8 +62,11 @@ export function useMachines({ showToast, confirm, setLoading }: UseMachinesParam
               extras.setInspectData(result.stdout);
             }
             extras.setShowInspectModal(true);
+          } else if (!result.success) {
+            showToast("error", result.stderr || "Failed to inspect machine");
           }
-          break;
+          setLoading(false);
+          return;
         default:
           return;
       }
