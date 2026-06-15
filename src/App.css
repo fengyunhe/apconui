@@ -397,7 +397,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 24px;
-  width: 560px;
+  width: 680px;
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
@@ -493,6 +493,31 @@ body {
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+.image-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  z-index: 100;
+}
+
+.image-dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.image-dropdown-item:hover {
+  background: var(--bg-hover);
 }
 
 /* Logs & Inspect */
@@ -605,6 +630,17 @@ body {
   font-size: 11px;
   color: var(--accent-teal);
   white-space: nowrap;
+}
+
+.port-link {
+  color: var(--accent-teal);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.port-link:hover {
+  text-decoration: underline;
+  color: var(--accent-blue);
 }
 
 .cell-resources {
@@ -732,6 +768,22 @@ body {
   color: var(--text-muted);
   padding: 60px 24px;
   font-size: 14px;
+}
+
+.variant-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.variant-section .detail-section {
+  border: none;
+  border-radius: 0;
+}
+
+.variant-section .detail-section:not(:last-child) {
+  border-bottom: 1px solid var(--border);
 }
 
 .detail-section {

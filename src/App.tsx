@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
@@ -223,6 +223,7 @@ function App() {
   const [systemStatus, setSystemStatus] = useState<string>("unknown");
 
   const [showRunModal, setShowRunModal] = useState(false);
+  const [runModalImage, setRunModalImage] = useState<string | undefined>(undefined);
   const [showBuildModal, setShowBuildModal] = useState(false);
   const [showCreateVolumeModal, setShowCreateVolumeModal] = useState(false);
   const [showCreateNetworkModal, setShowCreateNetworkModal] = useState(false);
@@ -956,6 +957,7 @@ function App() {
             }}
             onTag={(name) => { setTagImageSource(name); setShowTagModal(true); }}
             onPush={(name) => { setPushImageRef(name); setShowPushModal(true); }}
+            onCreateContainer={(name) => { setRunModalImage(name); setShowRunModal(true); }}
             containers={containers}
             onPrune={handlePruneImages}
             onRowClick={showImageDetail}
@@ -1021,7 +1023,9 @@ function App() {
       {showRunModal && (
         <RunContainerModal
           images={images}
-          onClose={() => setShowRunModal(false)}
+          networks={networks}
+          initialImage={runModalImage}
+          onClose={() => { setShowRunModal(false); setRunModalImage(undefined); }}
           onRun={async (config) => {
             setLoading(true);
             try {
@@ -1447,7 +1451,25 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
                       </span>
                     </td>
                     <td>{c.ip || "-"}</td>
-                    <td className="cell-ports">{c.ports || "-"}</td>
+                    <td className="cell-ports">
+                      {c.ports ? c.ports.split(",").map((p, i) => {
+                        const match = p.trim().match(/^(\d+):/);
+                        const hostPort = match ? match[1] : null;
+                        return hostPort ? (
+                          <span key={i}>
+                            {i > 0 && ", "}
+                            <a
+                              href="#"
+                              className="port-link"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`http://localhost:${hostPort}`); }}
+                              title={`Open http://localhost:${hostPort}`}
+                            >
+                              {p.trim()}
+                            </a>
+                          </span>
+                        ) : <span key={i}>{i > 0 && ", "}{p.trim()}</span>;
+                      }) : "-"}
+                    </td>
                     <td className="cell-resources">
                       {c.cpus > 0 || memMB ? (
                         <span title={`CPU: ${c.cpus || "-"} cores, Memory: ${memMB ? memMB + " MB" : "-"}`}>
@@ -1459,16 +1481,30 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
                     <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
                       {c.state === "running" ? (
                         <>
-                          <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">Stop</button>
-                          <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title="Kill">Kill</button>
+                          <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title="Kill">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
                         </>
                       ) : (
-                        <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title="Start">Start</button>
+                        <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title="Start">
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
                       )}
-                      <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title="Logs">Logs</button>
-                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title="Inspect">Inspect</button>
-                      <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title="Exec Shell">Exec</button>
-                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title="Delete">Delete</button>
+                      <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title="Logs">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title="Inspect">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title="Exec Shell">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title="Delete">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1481,7 +1517,7 @@ function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart,
   );
 }
 
-function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onInspect, onTag, onPush, containers, onPrune, onRowClick }: {
+function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onInspect, onTag, onPush, onCreateContainer, containers, onPrune, onRowClick }: {
   images: Image[];
   loading: boolean;
   onRefresh: () => void;
@@ -1491,6 +1527,7 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
   onInspect: (fullName: string) => void;
   onTag: (name: string) => void;
   onPush: (name: string) => void;
+  onCreateContainer: (fullName: string) => void;
   containers: Container[];
   onPrune: () => void;
   onRowClick: (fullName: string) => void;
@@ -1635,10 +1672,21 @@ function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onIn
                       )}
                     </td>
                     <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">Tag</button>
-                      <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">Push</button>
-                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">Inspect</button>
-                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>Delete</button>
+                      <button className="btn btn-xs btn-success" onClick={() => onCreateContainer(fullName)} title="Run Container">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      </button>
+                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1828,13 +1876,15 @@ function MachinesTab({ machines, loading, onRefresh, onCreate, onStart, onStop, 
 
 // ==================== Modal Components ====================
 
-function RunContainerModal({ images, onClose, onRun }: {
+function RunContainerModal({ images, networks, initialImage, onClose, onRun }: {
   images: Image[];
+  networks: Network[];
+  initialImage?: string;
   onClose: () => void;
   onRun: (config: Record<string, unknown>) => void;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [image, setImage] = useState(images[0] ? `${images[0].name}:${images[0].tag}` : "");
+  const [image, setImage] = useState(initialImage || (images[0] ? `${images[0].name}:${images[0].tag}` : ""));
   const [name, setName] = useState("");
   const [detach, setDetach] = useState(true);
   const [rm, setRm] = useState(false);
@@ -1860,6 +1910,28 @@ function RunContainerModal({ images, onClose, onRun }: {
   const [ssh, setSsh] = useState(false);
   const [shmSize, setShmSize] = useState("");
   const [user, setUser] = useState("");
+  const [imageDropdownOpen, setImageDropdownOpen] = useState(false);
+
+  const handleImageChange = async (value: string) => {
+    setImage(value);
+    const matchedImage = images.find(img => `${img.name}:${img.tag}` === value);
+    if (matchedImage) {
+      try {
+        const result = await invoke<CommandResult>("inspect_image", { name: value });
+        if (result.success && result.stdout.trim()) {
+          const imgData = JSON.parse(result.stdout);
+          const imgObj = Array.isArray(imgData) ? imgData[0] : imgData;
+          const configObj = imgObj?.configuration?.config?.config || {};
+          const imgEnvs = configObj.Env || [];
+          if (imgEnvs.length > 0) {
+            setEnvs(imgEnvs.join(","));
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   return (
     <Modal onClose={onClose}>
@@ -1867,7 +1939,28 @@ function RunContainerModal({ images, onClose, onRun }: {
       <div className="form-grid">
         <div className="form-group">
           <label>Image *</label>
-          <input value={image} onChange={(e) => setImage(e.target.value)} placeholder="docker.io/library/nginx:latest" />
+          <div style={{ position: "relative" }}>
+            <input
+              value={image}
+              onChange={(e) => setImage(e.target.value)}
+              placeholder="docker.io/library/nginx:latest"
+              onFocus={() => setImageDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setImageDropdownOpen(false), 200)}
+            />
+            {imageDropdownOpen && images.length > 0 && (
+              <div className="image-dropdown">
+                {images.map((img) => (
+                  <div
+                    key={`${img.name}:${img.tag}`}
+                    className="image-dropdown-item"
+                    onMouseDown={() => handleImageChange(`${img.name}:${img.tag}`)}
+                  >
+                    {img.name}:{img.tag}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="form-group">
           <label>Name</label>
@@ -1886,24 +1979,27 @@ function RunContainerModal({ images, onClose, onRun }: {
           <input value={ports} onChange={(e) => setPorts(e.target.value)} placeholder="8080:80,3000:3000" />
         </div>
         <div className="form-group">
-          <label>Environment (comma sep)</label>
-          <input value={envs} onChange={(e) => setEnvs(e.target.value)} placeholder="KEY=val,FOO=bar" />
-        </div>
-        <div className="form-group">
           <label>Volumes (comma sep)</label>
           <input value={volumes} onChange={(e) => setVolumes(e.target.value)} placeholder="/host:/container" />
         </div>
+        <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+          <label>Environment (comma sep)</label>
+          <textarea
+            value={envs}
+            onChange={(e) => setEnvs(e.target.value)}
+            placeholder="KEY=val,FOO=bar"
+            rows={3}
+            style={{ resize: "none", fontFamily: "monospace" }}
+          />
+        </div>
         <div className="form-group">
           <label>Network</label>
-          <input value={network} onChange={(e) => setNetwork(e.target.value)} placeholder="default" />
-        </div>
-        <div className="form-group">
-          <label>Entrypoint</label>
-          <input value={entrypoint} onChange={(e) => setEntrypoint(e.target.value)} placeholder="/bin/sh" />
-        </div>
-        <div className="form-group">
-          <label>Working Dir</label>
-          <input value={workdir} onChange={(e) => setWorkdir(e.target.value)} placeholder="/app" />
+          <select value={network} onChange={(e) => setNetwork(e.target.value)}>
+            <option value="">Default</option>
+            {networks.map((n) => (
+              <option key={n.name} value={n.name}>{n.name}</option>
+            ))}
+          </select>
         </div>
         <div className="form-group form-checkboxes">
           <label><input type="checkbox" checked={detach} onChange={(e) => setDetach(e.target.checked)} /> Detach</label>
@@ -1917,6 +2013,14 @@ function RunContainerModal({ images, onClose, onRun }: {
 
       {showAdvanced && (
         <div className="form-grid" style={{ borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
+          <div className="form-group">
+            <label>Entrypoint</label>
+            <input value={entrypoint} onChange={(e) => setEntrypoint(e.target.value)} placeholder="/bin/sh" />
+          </div>
+          <div className="form-group">
+            <label>Working Dir</label>
+            <input value={workdir} onChange={(e) => setWorkdir(e.target.value)} placeholder="/app" />
+          </div>
           <div className="form-group">
             <label>Architecture</label>
             <select value={arch} onChange={(e) => setArch(e.target.value)}>
@@ -2592,27 +2696,27 @@ function ImageDetail({ data, loading, onBack, onTag, onPush }: {
   onTag: (name: string) => void;
   onPush: (name: string) => void;
 }) {
-  const config = (data?.configuration || {}) as Record<string, unknown>;
-  const name = (config.name || "") as string;
-  const created = (config.created || "") as string;
-  const arch = (config.architecture || "") as string;
-  const os = (config.os || "") as string;
-  const author = (config.author || "") as string;
-  const desc = (config.descriptor || {}) as Record<string, unknown>;
+  const id = (data?.id || "") as string;
+  const imgData = (data?.configuration || {}) as Record<string, unknown>;
+  const name = (imgData.name || "") as string;
+  const creationDate = (imgData.creationDate || "") as string;
+  const desc = (imgData.descriptor || {}) as Record<string, unknown>;
   const size = (desc.size || 0) as number;
   const mediatype = (desc.mediaType || "") as string;
-  const configObj = (config.config || {}) as Record<string, unknown>;
-  const entrypoint = (configObj.Entrypoint || []) as string[];
-  const cmd = (configObj.Cmd || []) as string[];
-  const env = (configObj.Env || []) as string[];
-  const workingDir = (configObj.WorkingDir || "") as string;
-  const user = (configObj.User || "") as string;
-  const exposedPorts = (configObj.ExposedPorts || {}) as Record<string, unknown>;
-  const labels = (configObj.Labels || {}) as Record<string, string>;
-  const history = (config.history || []) as Array<Record<string, unknown>>;
-  const rootfs = (config.rootfs || {}) as Record<string, unknown>;
+  const history = (imgData.history || []) as Array<Record<string, unknown>>;
+  const rootfs = (imgData.rootfs || {}) as Record<string, unknown>;
   const diffIDs = (rootfs.diff_ids || []) as string[];
-  const id = (data?.id || "") as string;
+  const variants = (data?.variants || []) as Array<Record<string, unknown>>;
+
+  const configObj = (imgData.config || {}) as Record<string, unknown>;
+  const imageConfig = (configObj.config || {}) as Record<string, unknown>;
+  const entrypoint = (imageConfig.Entrypoint || []) as string[];
+  const cmd = (imageConfig.Cmd || []) as string[];
+  const env = (imageConfig.Env || []) as string[];
+  const workingDir = (imageConfig.WorkingDir || "") as string;
+  const user = (imageConfig.User || "") as string;
+  const exposedPorts = (imageConfig.ExposedPorts || {}) as Record<string, unknown>;
+  const labels = (imageConfig.Labels || {}) as Record<string, string>;
 
   if (loading) {
     return (
@@ -2659,10 +2763,7 @@ function ImageDetail({ data, loading, onBack, onTag, onPush }: {
         <DetailSection title="General">
           <DetailRow label="ID" value={<span className="cell-digest">{id}</span>} />
           <DetailRow label="Name" value={name || "-"} />
-          <DetailRow label="Created" value={created ? new Date(created).toLocaleString() : "-"} />
-          <DetailRow label="Author" value={author || "-"} />
-          <DetailRow label="Architecture" value={arch || "-"} />
-          <DetailRow label="OS" value={os || "-"} />
+          <DetailRow label="Created" value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
           <DetailRow label="Size" value={size ? formatBytes(size) : "-"} />
           <DetailRow label="Media Type" value={mediatype || "-"} />
         </DetailSection>
@@ -2692,6 +2793,25 @@ function ImageDetail({ data, loading, onBack, onTag, onPush }: {
             {Object.entries(labels).map(([k, v]) => (
               <DetailRow key={k} label={k} value={v} />
             ))}
+          </DetailSection>
+        )}
+
+        {variants.length > 1 && (
+          <DetailSection title={`Variants (${variants.length})`}>
+            <div className="detail-layers">
+              {variants.map((v, i) => {
+                const platform = (v.platform || {}) as Record<string, unknown>;
+                const vArch = (platform.architecture || "") as string;
+                const vOs = (platform.os || "") as string;
+                const vSize = (v.size || 0) as number;
+                return (
+                  <div key={i} className="detail-layer">
+                    <span className="detail-layer-num">#{i + 1}</span>
+                    <code className="detail-layer-id">{vOs}/{vArch} - {vSize ? formatBytes(vSize) : "-"}</code>
+                  </div>
+                );
+              })}
+            </div>
           </DetailSection>
         )}
 
