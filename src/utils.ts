@@ -94,6 +94,11 @@ export function mapVolumes(raw: RawVolume[]): import("./types").Volume[] {
   }));
 }
 
+
+// ===== 共享常量 =====
+export const TOAST_ERROR = "error";
+export const TOAST_SUCCESS = "success";
+export const TOAST_INFO = "info";
 export function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return "0 B";
   const k = 1024;
