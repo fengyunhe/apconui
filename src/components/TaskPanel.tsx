@@ -3,13 +3,12 @@ import { listen } from "@tauri-apps/api/event";
 import type { PullTask } from "../types";
 
 interface TaskPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
   onTaskComplete?: () => void;
 }
 
-export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
+export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
   const [tasks, setTasks] = useState<PullTask[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
 
   const addTask = useCallback((reference: string) => {
     const newTask: PullTask = {
@@ -22,24 +21,24 @@ export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
     setTasks((prev) => [...prev, newTask]);
   }, []);
 
-  const updateTask = useCallback((taskId: string, progress: string) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId && task.status === "running"
-          ? { ...task, progress }
-          : task
-      )
-    );
+  const updateTask = useCallback((progress: string) => {
+    setTasks((prev) => {
+      const idx = prev.findIndex((task) => task.status === "running");
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = { ...next[idx], progress };
+      return next;
+    });
   }, []);
 
-  const completeTask = useCallback((taskId: string, success: boolean) => {
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? { ...task, status: success ? "completed" : "failed" }
-          : task
-      )
-    );
+  const completeTask = useCallback((success: boolean) => {
+    setTasks((prev) => {
+      const idx = prev.findIndex((task) => task.status === "running");
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = { ...next[idx], status: success ? "completed" : "failed" };
+      return next;
+    });
     onTaskComplete?.();
   }, [onTaskComplete]);
 
@@ -56,19 +55,13 @@ export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
       addTask(event.payload);
     });
 
-    const unlistenProgress = listen<{ taskId: string; progress: string }>(
-      "pull-progress-detail",
-      (event) => {
-        updateTask(event.payload.taskId, event.payload.progress);
-      }
-    );
+    const unlistenProgress = listen<string>("pull-progress", (event) => {
+      updateTask(event.payload);
+    });
 
-    const unlistenComplete = listen<{ taskId: string; success: boolean }>(
-      "pull-complete-detail",
-      (event) => {
-        completeTask(event.payload.taskId, event.payload.success);
-      }
-    );
+    const unlistenComplete = listen<boolean>("pull-complete", (event) => {
+      completeTask(event.payload);
+    });
 
     return () => {
       unlistenPullStart.then((fn) => fn());
@@ -80,10 +73,21 @@ export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
   const runningTasks = tasks.filter((t) => t.status === "running");
   const completedTasks = tasks.filter((t) => t.status !== "running");
 
-  if (!isOpen) return null;
+  const showToggle = tasks.length > 0 || isOpen;
 
   return (
-    <div className="task-panel-overlay" onClick={onClose}>
+    <>
+      {showToggle && (
+        <button className="task-panel-toggle" onClick={() => setIsOpen(true)}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          {runningTasks.length > 0 ? `${runningTasks.length} running` : "Tasks"}
+        </button>
+      )}
+      {isOpen && (
+    <div className="task-panel-overlay" onClick={() => setIsOpen(false)}>
       <div className="task-panel" onClick={(e) => e.stopPropagation()}>
         <div className="task-panel-header">
           <div className="task-panel-title">
@@ -102,7 +106,7 @@ export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
                 Clear Completed
               </button>
             )}
-            <button className="btn btn-xs btn-secondary" onClick={onClose}>
+            <button className="btn btn-xs btn-secondary" onClick={() => setIsOpen(false)}>
               Close
             </button>
           </div>
@@ -192,5 +196,7 @@ export function TaskPanel({ isOpen, onClose, onTaskComplete }: TaskPanelProps) {
         </div>
       </div>
     </div>
+      )}
+    </>
   );
 }
