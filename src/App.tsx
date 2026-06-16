@@ -419,6 +419,8 @@ function App() {
           images={images}
           networks={networks}
           initialImage={runModalImage}
+          loading={loading}
+          loadingMessage="Starting container... (may pull image if not local)"
           onClose={() => { setShowRunModal(false); setRunModalImage(undefined); }}
           onRun={async (config) => {
             setLoading(true);

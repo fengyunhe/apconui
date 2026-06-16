@@ -7,11 +7,13 @@ interface RunContainerModalProps {
   images: Image[];
   networks: Network[];
   initialImage?: string;
+  loading?: boolean;
+  loadingMessage?: string;
   onClose: () => void;
   onRun: (config: Record<string, unknown>) => void;
 }
 
-export function RunContainerModal({ images, networks, initialImage, onClose, onRun }: RunContainerModalProps) {
+export function RunContainerModal({ images, networks, initialImage, loading, loadingMessage, onClose, onRun }: RunContainerModalProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [image, setImage] = useState(initialImage || (images[0] ? `${images[0].name}:${images[0].tag}` : ""));
   const [name, setName] = useState("");
@@ -63,9 +65,22 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={loading ? () => {} : onClose}>
       <h2>Run Container</h2>
-      <div className="form-grid">
+
+      {loading && (
+        <div className="run-loading-overlay">
+          <div className="run-loading-spinner">
+            <svg className="animate-spin" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+            </svg>
+          </div>
+          <p className="run-loading-text">{loadingMessage || "Starting container..."}</p>
+          <p className="run-loading-hint">This may take a while if the image needs to be pulled.</p>
+        </div>
+      )}
+
+      <div className="form-grid" style={{ opacity: loading ? 0.5 : 1, pointerEvents: loading ? "none" : "auto" }}>
         <div className="form-group">
           <label>Image *</label>
           <div style={{ position: "relative" }}>
@@ -204,7 +219,7 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
       )}
 
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={loading}>Cancel</button>
         <button className="btn btn-primary" onClick={() => onRun({
           image, name: name || null, detach, rm, cpus: cpus || null, memory: memory || null,
           ports: ports || null, envs: envs || null, volumes: volumes || null, network: network || null,
@@ -215,7 +230,9 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
           os: null, platform: null, readOnly, rosetta, runtime: runtime || null,
           ssh, shmSize: shmSize || null, tmpfs: null, ulimit: null, user: user || null,
           maxConcurrentDownloads: null, progress: null,
-        })} disabled={!image}>Run</button>
+        })} disabled={!image || loading}>
+          {loading ? (loadingMessage || "Running...") : "Run"}
+        </button>
       </div>
     </Modal>
   );
