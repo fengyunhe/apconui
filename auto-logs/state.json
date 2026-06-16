@@ -1,0 +1,10 @@
+{
+  "lastRun": "2026-06-15T23:26:40.403Z",
+  "appliedFixes": [],
+  "appliedRequirements": [
+    "2026-06-15T23-26-40-403Z: REQ-toast-constants — 抽取 TOAST_ERROR/TOAST_SUCCESS 常量",
+    "2026-06-15T23-26-40-403Z: REQ-shared-types — 补充 ToastType / ConfirmDialog / Tab 类型",
+    "2026-06-15T23-26-40-403Z: REQ-theme-vars — 添加设计系统 CSS 变量到 index.css"
+  ],
+  "runCount": 1
+}

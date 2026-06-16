@@ -113,3 +113,12 @@ export interface CommandResult {
   stdout: string;
   stderr: string;
 }
+
+// ===== 共享 UI 类型 =====
+export type ToastType = "info" | "success" | "error";
+export interface ConfirmDialog {
+  show: boolean;
+  message: string;
+  onConfirm?: () => void;
+}
+export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings";

@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+
+// PERF: memoized counts
 import { invoke } from "@tauri-apps/api/core";
 import type { CommandResult, Container, Volume, Network, Tab } from "./types";
 import { useToast } from "./hooks/useToast";
+import { TOAST_ERROR, TOAST_SUCCESS } from "./utils";
 import { useConfirm } from "./hooks/useConfirm";
 import { useContainers } from "./hooks/useContainers";
 import { useImages } from "./hooks/useImages";
@@ -127,7 +130,7 @@ function App() {
         setSelectedContainer(containers.find(c => c.id === id) || null);
         setShowInspectModal(true);
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
       showToast("error", String(e));
@@ -140,7 +143,7 @@ function App() {
     try {
       const result = await invoke<CommandResult>("exec_container_shell", { id });
       if (result.success) {
-        showToast("success", "Shell opened in Terminal");
+        showToast(TOAST_SUCCESS, "Shell opened in Terminal");
       } else {
         showToast("error", result.stderr);
       }
