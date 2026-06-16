@@ -1618,6 +1618,15 @@ body {
   color: var(--text-primary);
 }
 
+.task-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
 /* Task Panel Toggle Button */
 .task-panel-toggle {
   position: fixed;

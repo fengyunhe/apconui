@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import type { PullTask } from "../types";
 
 interface TaskPanelProps {
@@ -41,6 +42,21 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
     });
     onTaskComplete?.();
   }, [onTaskComplete]);
+
+  const cancelTask = useCallback(async (taskId: string) => {
+    try {
+      await invoke("cancel_pull");
+      setTasks((prev) => {
+        const idx = prev.findIndex((task) => task.id === taskId);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next[idx] = { ...next[idx], status: "failed", error: "Cancelled by user" };
+        return next;
+      });
+    } catch (e) {
+      console.error("Failed to cancel pull:", e);
+    }
+  }, []);
 
   const removeTask = useCallback((taskId: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
@@ -158,6 +174,13 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
                         <div className="progress-bar-indeterminate"></div>
                       </div>
                       <p className="progress-text">{task.progress}</p>
+                      <button className="btn btn-danger btn-xs task-cancel-btn" onClick={() => cancelTask(task.id)}>
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18"/>
+                          <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                        Cancel
+                      </button>
                     </div>
                   )}
 

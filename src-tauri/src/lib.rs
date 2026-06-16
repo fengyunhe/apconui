@@ -6,6 +6,14 @@ use tauri::{Emitter, Manager};
 
 mod docker_proxy;
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
+static PULL_PID: AtomicU32 = AtomicU32::new(0);
+
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
+
 fn log_to_file(msg: &str) {
     if let Ok(mut f) = OpenOptions::new()
         .create(true)
@@ -66,11 +74,38 @@ async fn run_container_cmd_async(args: Vec<String>) -> CommandResult {
     })
 }
 
-fn leak(s: String) -> &'static str {
-    Box::leak(s.into_boxed_str())
-}
+#[tauri::command]
+fn cancel_pull() -> CommandResult {
+    let pid = PULL_PID.load(Ordering::SeqCst);
+    if pid == 0 {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "No pull in progress".to_string(),
+        };
+    }
 
-// ==================== System Commands ====================
+    // Kill the process group
+    let result = unsafe {
+        libc::kill(-(pid as i32), libc::SIGTERM)
+    };
+
+    PULL_PID.store(0, Ordering::SeqCst);
+
+    if result == 0 {
+        CommandResult {
+            success: true,
+            stdout: "Pull cancelled".to_string(),
+            stderr: String::new(),
+        }
+    } else {
+        CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to cancel pull: {}", std::io::Error::last_os_error()),
+        }
+    }
+}
 
 #[tauri::command]
 async fn system_start() -> CommandResult {
@@ -622,6 +657,9 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
             }
         };
 
+        // Store PID for cancellation
+        PULL_PID.store(child.id(), Ordering::SeqCst);
+
         let stderr = child.stderr.take().unwrap();
         let reader = BufReader::new(stderr);
         let mut last_progress = String::new();
@@ -659,6 +697,9 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
             log_to_file(&format!("Error waiting for pull: {e}"));
             std::process::ExitStatus::default()
         });
+
+        // Clear PID
+        PULL_PID.store(0, Ordering::SeqCst);
 
         let _ = app.emit("pull-complete", status.success());
 
@@ -1998,6 +2039,7 @@ pub fn run() {
             set_default_machine,
             run_machine_command,
             run_raw_command,
+            cancel_pull,
             get_docker_socket_path,
             is_socktainer_installed,
             is_socktainer_running,

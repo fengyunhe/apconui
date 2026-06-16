@@ -121,7 +121,6 @@ export interface ConfirmDialog {
   message: string;
   onConfirm?: () => void;
 }
-export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings";
 
 // ===== Pull 任务类型 =====
 export interface PullTask {
