@@ -32,6 +32,7 @@ import { InspectModal } from "./components/InspectModal";
 import { ContainerDetail } from "./components/ContainerDetail";
 import { ImageDetail } from "./components/ImageDetail";
 import { Modal } from "./components/Modal";
+import { TaskPanel } from "./components/TaskPanel";
 import "./App.css";
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
   const [showCreateMachineModal, setShowCreateMachineModal] = useState(false);
   const [showPullModal, setShowPullModal] = useState(false);
   const [showInspectModal, setShowInspectModal] = useState(false);
+  const [showTaskPanel, setShowTaskPanel] = useState(false);
   const [inspectData, setInspectData] = useState("");
 
   const [showVolumeInspectModal, setShowVolumeInspectModal] = useState(false);
@@ -321,12 +323,20 @@ function App() {
         )}
 
         {activeTab === "images" && (
-          <ImagesTab
-            images={images}
-            loading={loading}
-            onRefresh={refreshImages}
-            onPull={() => setShowPullModal(true)}
-            onBuild={() => setShowBuildModal(true)}
+          <>
+            <button className="task-panel-toggle" onClick={() => setShowTaskPanel(true)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Tasks
+            </button>
+            <ImagesTab
+              images={images}
+              loading={loading}
+              onRefresh={refreshImages}
+              onPull={() => setShowPullModal(true)}
+              onBuild={() => setShowBuildModal(true)}
             onDelete={(name) => handleImageAction("delete", name)}
             onInspect={async (fullName) => {
               setLoading(true);
@@ -351,6 +361,7 @@ function App() {
             onPrune={handlePruneImages}
             onRowClick={showImageDetail}
           />
+          </>
         )}
 
         {activeTab === "volumes" && (
@@ -683,6 +694,12 @@ function App() {
           </div>
         </Modal>
       )}
+
+      <TaskPanel
+        isOpen={showTaskPanel}
+        onClose={() => setShowTaskPanel(false)}
+        onTaskComplete={refreshImages}
+      />
     </div>
   );
 }

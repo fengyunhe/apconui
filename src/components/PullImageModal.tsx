@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { Modal } from "./Modal";
 
 interface PullImageModalProps {
@@ -11,24 +11,36 @@ export function PullImageModal({ onClose, onPull }: PullImageModalProps) {
   const [reference, setReference] = useState("");
   const [progress, setProgress] = useState("");
   const [pulling, setPulling] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const unlistenProgress = listen<string>("pull-progress", (event) => {
       setProgress(event.payload);
+      if (taskId) {
+        emit("pull-progress-detail", { taskId, progress: event.payload });
+      }
     });
-    const unlistenComplete = listen<boolean>("pull-complete", () => {
+    const unlistenComplete = listen<boolean>("pull-complete", (event) => {
       setPulling(false);
       setProgress("");
+      if (taskId) {
+        emit("pull-complete-detail", { taskId, success: event.payload });
+        setTaskId(null);
+      }
     });
     return () => {
       unlistenProgress.then((fn) => fn());
       unlistenComplete.then((fn) => fn());
     };
-  }, []);
+  }, [taskId]);
 
   const handlePull = async () => {
+    const newTaskId = `${reference}-${Date.now()}`;
+    setTaskId(newTaskId);
     setPulling(true);
     setProgress("Starting pull...");
+    emit("pull-start", reference);
+    emit("pull-progress-detail", { taskId: newTaskId, progress: "Starting pull..." });
     await onPull(reference);
   };
 
