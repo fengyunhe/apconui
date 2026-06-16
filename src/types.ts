@@ -122,3 +122,18 @@ export interface ConfirmDialog {
   onConfirm?: () => void;
 }
 export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings";
+
+// ===== Pull 任务类型 =====
+export interface PullTask {
+  id: string;
+  reference: string;
+  status: "running" | "completed" | "failed";
+  progress: string;
+  progressDetails?: {
+    current: number;
+    total: number;
+    percentage: number;
+  };
+  error?: string;
+  startTime: number;
+}
