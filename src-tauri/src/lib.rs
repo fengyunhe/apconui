@@ -6,8 +6,9 @@ use tauri::{Emitter, Manager};
 
 mod docker_proxy;
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+static PULL_CANCELLED: AtomicBool = AtomicBool::new(false);
 static PULL_PID: AtomicU32 = AtomicU32::new(0);
 
 fn leak(s: String) -> &'static str {
@@ -85,25 +86,18 @@ fn cancel_pull() -> CommandResult {
         };
     }
 
-    // Kill the process group
-    let result = unsafe {
+    // Set cancellation flag - the pull loop will check this and kill the process
+    PULL_CANCELLED.store(true, Ordering::SeqCst);
+
+    // Also kill the process directly as a backup
+    let _ = unsafe {
         libc::kill(-(pid as i32), libc::SIGTERM)
     };
 
-    PULL_PID.store(0, Ordering::SeqCst);
-
-    if result == 0 {
-        CommandResult {
-            success: true,
-            stdout: "Pull cancelled".to_string(),
-            stderr: String::new(),
-        }
-    } else {
-        CommandResult {
-            success: false,
-            stdout: String::new(),
-            stderr: format!("Failed to cancel pull: {}", std::io::Error::last_os_error()),
-        }
+    CommandResult {
+        success: true,
+        stdout: "Pull cancellation requested".to_string(),
+        stderr: String::new(),
     }
 }
 
@@ -637,6 +631,9 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
     let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
     let ref_clone = reference.clone();
 
+    // Reset cancellation flag
+    PULL_CANCELLED.store(false, Ordering::SeqCst);
+
     tokio::task::spawn_blocking(move || {
         log_to_file(&format!("Pulling image: {}", ref_clone));
 
@@ -665,6 +662,18 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
         let mut last_progress = String::new();
 
         for line in reader.lines() {
+            // Check if cancelled
+            if PULL_CANCELLED.load(Ordering::SeqCst) {
+                log_to_file("Pull cancelled by user");
+                let _ = child.kill();
+                let _ = app.emit("pull-complete", false);
+                return CommandResult {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "Pull cancelled".to_string(),
+                };
+            }
+
             match line {
                 Ok(line) => {
                     let line = line.trim().to_string();
@@ -693,13 +702,13 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
             }
         }
 
+        // Clear PID
+        PULL_PID.store(0, Ordering::SeqCst);
+
         let status = child.wait().unwrap_or_else(|e| {
             log_to_file(&format!("Error waiting for pull: {e}"));
             std::process::ExitStatus::default()
         });
-
-        // Clear PID
-        PULL_PID.store(0, Ordering::SeqCst);
 
         let _ = app.emit("pull-complete", status.success());
 
