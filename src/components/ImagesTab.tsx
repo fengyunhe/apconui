@@ -124,7 +124,6 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
               {verbose && <th>Architectures</th>}
               {verbose && <th>Cmd</th>}
               <th>Containers</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>

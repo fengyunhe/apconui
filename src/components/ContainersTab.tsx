@@ -132,7 +132,6 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
               <th>Ports</th>
               <th>Resources</th>
               <th>Created</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
