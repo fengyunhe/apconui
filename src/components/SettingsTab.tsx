@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from 'react-i18next';
+import { changeLanguage } from '../i18n';
 import type { CommandResult } from "../types";
 
 interface DockerSettings {
@@ -15,6 +17,7 @@ const DEFAULT_SETTINGS: DockerSettings = {
 };
 
 export function SettingsTab() {
+  const { t, i18n } = useTranslation();
   const [settings, setSettings] = useState<DockerSettings>(() => {
     try {
       const saved = localStorage.getItem("docker-settings");
@@ -162,7 +165,7 @@ export function SettingsTab() {
   };
 
   const handleResetSettings = () => {
-    if (confirm("Reset all Docker compatibility settings to defaults?")) {
+    if (confirm(t('settings.resetConfirm'))) {
       setSettings(DEFAULT_SETTINGS);
     }
   };
@@ -170,24 +173,54 @@ export function SettingsTab() {
   return (
     <div className="tab-content">
       <div className="tab-header">
-        <h2>Settings</h2>
+        <h2>{t('settings.title')}</h2>
       </div>
 
       <div className="settings-container">
+        {/* Language Section */}
+        <div className="settings-section">
+          <h3 className="settings-section-title">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            {t('settings.language')}
+          </h3>
+
+          <div className="settings-item">
+            <div className="settings-item-info">
+              <label className="settings-label">{t('settings.language')}</label>
+              <p className="settings-description">
+                {t('settings.languageDesc')}
+              </p>
+            </div>
+            <select
+              className="settings-input"
+              value={i18n.language}
+              onChange={(e) => changeLanguage(e.target.value)}
+              style={{ width: 150 }}
+            >
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+
         {/* Docker Compatibility Section */}
         <div className="settings-section">
           <h3 className="settings-section-title">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
-            Docker Compatibility
+            {t('settings.dockerCompatibility')}
           </h3>
 
           <div className="settings-item">
             <div className="settings-item-info">
-              <label className="settings-label">Enable Docker Mode</label>
+              <label className="settings-label">{t('settings.enableDockerMode')}</label>
               <p className="settings-description">
-                Allow using docker commands in Terminal. Commands will be automatically translated to Apple Container.
+                {t('settings.enableDockerModeDesc')}
               </p>
             </div>
             <label className="toggle-switch">
@@ -202,9 +235,9 @@ export function SettingsTab() {
 
           <div className="settings-item">
             <div className="settings-item-info">
-              <label className="settings-label">Docker Socket Path</label>
+              <label className="settings-label">{t('settings.dockerSocketPath')}</label>
               <p className="settings-description">
-                Path where the Docker-compatible socket is exposed. This is auto-managed by the app.
+                {t('settings.dockerSocketPathDesc')}
               </p>
             </div>
             <div className="settings-input-group">
@@ -220,16 +253,16 @@ export function SettingsTab() {
                 onClick={handleTestSocket}
                 disabled={!settings.enabled}
               >
-                Test
+                {t('settings.test')}
               </button>
             </div>
           </div>
 
           <div className="settings-item">
             <div className="settings-item-info">
-              <label className="settings-label">Auto-start Socket Server</label>
+              <label className="settings-label">{t('settings.autoStartSocket')}</label>
               <p className="settings-description">
-                Automatically start the Docker-compatible socket server when the app launches.
+                {t('settings.autoStartSocketDesc')}
               </p>
             </div>
             <label className="toggle-switch">
@@ -250,30 +283,30 @@ export function SettingsTab() {
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 8 }}>
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
-            Socket Status
+            {t('settings.socketStatus')}
           </h3>
 
           <div className="settings-status-card">
             <div className="status-row">
-              <span className="status-label">Socket Path</span>
+              <span className="status-label">{t('settings.socketPath')}</span>
               <span className="status-value">{actualSocketPath || "Loading..."}</span>
             </div>
             <div className="status-row">
-              <span className="status-label">Connection</span>
+              <span className="status-label">{t('settings.connection')}</span>
               <span className={`status-badge status-badge-${socketStatus}`}>
-                {socketStatus === "checking" && "Checking..."}
-                {socketStatus === "connected" && "Connected"}
-                {socketStatus === "disconnected" && "Disconnected"}
+                {socketStatus === "checking" && t('settings.checking')}
+                {socketStatus === "connected" && t('settings.connected')}
+                {socketStatus === "disconnected" && t('settings.disconnected')}
               </span>
             </div>
             {socketStatus === "connected" && socketInfo.containers !== undefined && (
               <>
                 <div className="status-row">
-                  <span className="status-label">Containers</span>
+                  <span className="status-label">{t('settings.containers')}</span>
                   <span className="status-value">{socketInfo.containers}</span>
                 </div>
                 <div className="status-row">
-                  <span className="status-label">Images</span>
+                  <span className="status-label">{t('settings.images')}</span>
                   <span className="status-value">{socketInfo.images}</span>
                 </div>
               </>
@@ -289,16 +322,16 @@ export function SettingsTab() {
               <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
               <line x1="12" y1="22.08" x2="12" y2="12" />
             </svg>
-            Socktainer (Enhanced Docker API)
+            {t('settings.socktainer')}
           </h3>
 
           <div className="settings-item">
             <div className="settings-item-info">
-              <label className="settings-label">Use Socktainer</label>
+              <label className="settings-label">{t('settings.useSocktainer')}</label>
               <p className="settings-description">
                 {socktainerInstalled
-                  ? "Use Socktainer for a more complete Docker Engine API implementation with full field compatibility."
-                  : "Optional: Enhanced Docker API compatibility with full field support."}
+                  ? t('settings.useSocktainerDesc')
+                  : t('settings.useSocktainerOptional')}
               </p>
             </div>
             {socktainerInstalled ? (
@@ -309,7 +342,7 @@ export function SettingsTab() {
                     onClick={handleStopSocktainer}
                     disabled={socktainerLoading}
                   >
-                    {socktainerLoading ? "Stopping..." : "Stop Socktainer"}
+                    {socktainerLoading ? t('settings.stopping') : t('settings.stopSocktainer')}
                   </button>
                 ) : (
                   <button
@@ -317,7 +350,7 @@ export function SettingsTab() {
                     onClick={handleStartSocktainer}
                     disabled={socktainerLoading}
                   >
-                    {socktainerLoading ? "Starting..." : "Start Socktainer"}
+                    {socktainerLoading ? t('settings.starting') : t('settings.startSocktainer')}
                   </button>
                 )}
                 <label className="toggle-switch">
@@ -338,7 +371,7 @@ export function SettingsTab() {
               </div>
             ) : (
               <div className="settings-input-group">
-                <span className="status-badge status-badge-disconnected">Not Installed</span>
+                <span className="status-badge status-badge-disconnected">{t('settings.notInstalled')}</span>
               </div>
             )}
           </div>
@@ -354,10 +387,10 @@ export function SettingsTab() {
               </div>
               <div className="socktainer-hint-content">
                 <p className="socktainer-hint-text">
-                  Socktainer provides a more complete Docker Engine API with full field compatibility.
+                  {t('settings.socktainerDesc1')}
                 </p>
                 <p className="socktainer-hint-text">
-                  Install it to enable enhanced Docker API support:
+                  {t('settings.socktainerDesc2')}
                 </p>
                 <a
                   href="https://socktainer.github.io/"
@@ -379,17 +412,17 @@ export function SettingsTab() {
           {socktainerInstalled && (
             <div className="settings-status-card" style={{ marginTop: 12 }}>
               <div className="status-row">
-                <span className="status-label">Status</span>
+                <span className="status-label">{t('settings.status')}</span>
                 <span className={`status-badge ${socktainerRunning ? "status-badge-connected" : "status-badge-disconnected"}`}>
-                  {socktainerRunning ? "Running" : "Stopped"}
+                  {socktainerRunning ? t('settings.running') : t('settings.stopped')}
                 </span>
               </div>
               <div className="status-row">
-                <span className="status-label">Socket Path</span>
+                <span className="status-label">{t('settings.socketPath')}</span>
                 <span className="status-value">/Users/yan.yang/.socktainer/container.sock</span>
               </div>
               <div className="status-row">
-                <span className="status-label">API Version</span>
+                <span className="status-label">{t('settings.apiVersion')}</span>
                 <span className="status-value">v1.51 (full Docker Engine API)</span>
               </div>
             </div>
@@ -403,15 +436,15 @@ export function SettingsTab() {
               <polyline points="4 17 10 11 4 5" />
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
-            Docker Command Translation
+            {t('settings.dockerCommandTranslation')}
           </h3>
 
           <div className="settings-reference">
             <table className="settings-table">
               <thead>
                 <tr>
-                  <th>Docker Command</th>
-                  <th>Apple Container Command</th>
+                  <th>{t('settings.dockerCommand')}</th>
+                  <th>{t('settings.appleContainerCommand')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -439,7 +472,7 @@ export function SettingsTab() {
         {/* Actions */}
         <div className="settings-actions">
           <button className="btn btn-secondary" onClick={handleResetSettings}>
-            Reset to Defaults
+            {t('settings.resetToDefaults')}
           </button>
         </div>
       </div>

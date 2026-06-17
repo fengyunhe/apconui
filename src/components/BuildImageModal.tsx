@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { Modal } from "./Modal";
 
 interface BuildImageModalProps {
@@ -7,6 +8,7 @@ interface BuildImageModalProps {
 }
 
 export function BuildImageModal({ onClose, onBuild }: BuildImageModalProps) {
+  const { t } = useTranslation();
   const [context, setContext] = useState(".");
   const [tag, setTag] = useState("");
   const [dockerfile, setDockerfile] = useState("");
@@ -15,18 +17,18 @@ export function BuildImageModal({ onClose, onBuild }: BuildImageModalProps) {
 
   return (
     <Modal onClose={onClose}>
-      <h2>Build Image</h2>
+      <h2>{t('buildImage.title')}</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Context Directory</label>
+          <label>{t('buildImage.context')}</label>
           <input value={context} onChange={(e) => setContext(e.target.value)} placeholder="." />
         </div>
         <div className="form-group">
-          <label>Tag</label>
+          <label>{t('buildImage.tag')}</label>
           <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="my-app:latest" />
         </div>
         <div className="form-group">
-          <label>Dockerfile Path</label>
+          <label>{t('buildImage.dockerfile')}</label>
           <input value={dockerfile} onChange={(e) => setDockerfile(e.target.value)} placeholder="Dockerfile" />
         </div>
         <div className="form-group">
@@ -38,10 +40,10 @@ export function BuildImageModal({ onClose, onBuild }: BuildImageModalProps) {
         </div>
       </div>
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-secondary" onClick={onClose}>{t('modal.cancel')}</button>
         <button className="btn btn-primary" onClick={() => onBuild({
           context, tag, dockerfile: dockerfile || null, noCache, buildArgs: buildArgs || null
-        })} disabled={!tag}>Build</button>
+        })} disabled={!tag}>{t('buildImage.build')}</button>
       </div>
     </Modal>
   );

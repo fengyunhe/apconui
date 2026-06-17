@@ -1442,6 +1442,15 @@ body {
   overflow: hidden;
 }
 
+.terminal-tab .xterm {
+  height: 100%;
+  padding: 8px;
+}
+
+.terminal-tab .xterm-viewport {
+  overflow-y: auto !important;
+}
+
 .terminal-container {
   flex: 1;
   display: flex;
@@ -1481,6 +1490,15 @@ body {
 
 .terminal-error {
   color: var(--accent-red);
+}
+
+.streaming-cursor {
+  animation: blink 1s step-end infinite;
+  color: var(--accent-green);
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
 }
 
 .terminal-input-form {

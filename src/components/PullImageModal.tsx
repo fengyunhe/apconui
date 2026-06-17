@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { emit } from "@tauri-apps/api/event";
+import { useTranslation } from 'react-i18next';
 import { Modal } from "./Modal";
 
 interface PullImageModalProps {
@@ -8,6 +9,7 @@ interface PullImageModalProps {
 }
 
 export function PullImageModal({ onClose, onPull }: PullImageModalProps) {
+  const { t } = useTranslation();
   const [reference, setReference] = useState("");
   const [pulling, setPulling] = useState(false);
 
@@ -20,10 +22,10 @@ export function PullImageModal({ onClose, onPull }: PullImageModalProps) {
 
   return (
     <Modal onClose={onClose}>
-      <h2>Pull Image</h2>
+      <h2>{t('pullImage.title')}</h2>
       <div className="form-grid">
         <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-          <label>Image Reference</label>
+          <label>{t('pullImage.reference')}</label>
           <input
             value={reference}
             onChange={(e) => setReference(e.target.value)}
@@ -34,9 +36,9 @@ export function PullImageModal({ onClose, onPull }: PullImageModalProps) {
         </div>
       </div>
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose} disabled={pulling}>Cancel</button>
+        <button className="btn btn-secondary" onClick={onClose} disabled={pulling}>{t('modal.cancel')}</button>
         <button className="btn btn-primary" onClick={handlePull} disabled={!reference || pulling}>
-          {pulling ? "Pulling..." : "Pull"}
+          {pulling ? "Pulling..." : t('pullImage.pull')}
         </button>
       </div>
     </Modal>

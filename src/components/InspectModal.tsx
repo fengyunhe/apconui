@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Modal } from "./Modal";
 
 export function InspectModal({ title, data, onClose }: {
@@ -5,6 +6,7 @@ export function InspectModal({ title, data, onClose }: {
   data: string;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const handleCopy = () => {
     navigator.clipboard.writeText(data);
   };
@@ -18,7 +20,7 @@ export function InspectModal({ title, data, onClose }: {
         <pre>{data}</pre>
       </div>
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn btn-secondary" onClick={onClose}>{t('modal.close')}</button>
       </div>
     </Modal>
   );

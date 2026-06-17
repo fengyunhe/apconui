@@ -1,5 +1,6 @@
 import { useState, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from 'react-i18next';
 import type { Container, CommandResult } from "../types";
 
 interface ContainersTabProps {
@@ -19,6 +20,7 @@ interface ContainersTabProps {
 }
 
 export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, onStart, onDelete, onKill, onLogs, onInspect, onExec, onPrune, onRowClick }: ContainersTabProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -63,25 +65,25 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
   return (
     <div className="tab-content">
       <div className="tab-header">
-        <h2>Containers</h2>
+        <h2>{t('containers.title')}</h2>
         <div className="tab-actions">
           {selected.size > 0 && (
             <>
               <button className="btn btn-success btn-sm" onClick={() => batchAction("start")}>
-                Start ({selected.size})
+                {t('containers.start')} ({selected.size})
               </button>
               <button className="btn btn-warning btn-sm" onClick={() => batchAction("stop")}>
-                Stop ({selected.size})
+                {t('containers.stop')} ({selected.size})
               </button>
               <button className="btn btn-danger btn-sm" onClick={() => batchAction("delete")}>
-                Delete ({selected.size})
+                {t('containers.delete')} ({selected.size})
               </button>
             </>
           )}
           <input
             type="text"
             className="filter-input"
-            placeholder="Filter by ID, image, command, port..."
+            placeholder={t('containers.filterPlaceholder')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -90,26 +92,26 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
             value={stateFilter}
             onChange={(e) => setStateFilter(e.target.value)}
           >
-            <option value="all">All States</option>
-            <option value="running">Running</option>
-            <option value="exited">Exited</option>
-            <option value="created">Created</option>
+            <option value="all">{t('containers.allStates')}</option>
+            <option value="running">{t('containers.running')}</option>
+            <option value="exited">{t('containers.exited')}</option>
+            <option value="created">{t('containers.created')}</option>
           </select>
           <button className="btn btn-primary" onClick={onRun}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
-            Run
+            {t('containers.run')}
           </button>
           <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>
-            Prune Stopped
+            {t('containers.pruneStopped')}
           </button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M23 4v6h-6M1 20v-6h6" />
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
             </svg>
-            Refresh
+            {t('containers.refresh')}
           </button>
         </div>
       </div>
@@ -124,19 +126,19 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
                   onChange={toggleAll}
                 />
               </th>
-              <th>ID</th>
-              <th>Image</th>
-              <th>Command</th>
-              <th>State</th>
-              <th>IP</th>
-              <th>Ports</th>
-              <th>Resources</th>
-              <th>Created</th>
+              <th>{t('containers.id')}</th>
+              <th>{t('containers.image')}</th>
+              <th>{t('containers.command')}</th>
+              <th>{t('containers.state')}</th>
+              <th>{t('containers.ip')}</th>
+              <th>{t('containers.ports')}</th>
+              <th>{t('containers.resources')}</th>
+              <th>{t('containers.created_at')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredContainers.length === 0 ? (
-              <tr><td colSpan={9} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
+              <tr><td colSpan={9} className="empty-row">{containers.length === 0 ? t('containers.noContainers') : t('containers.noMatch')}</td></tr>
             ) : (
               filteredContainers.map((c) => {
                 const memMB = c.memoryBytes > 0 ? (c.memoryBytes / 1024 / 1024).toFixed(0) : null;
@@ -197,28 +199,28 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
                         <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
                           {c.state === "running" ? (
                             <>
-                              <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">
+                              <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title={t('containers.stop')}>
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
                               </button>
-                              <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title="Kill">
+                              <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title={t('containers.delete')}>
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                               </button>
                             </>
                           ) : (
-                            <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title="Start">
+                            <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title={t('containers.start')}>
                               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                             </button>
                           )}
-                          <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title="Logs">
+                          <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title={t('containers.logs')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title="Inspect">
+                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title={t('containers.inspect')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title="Exec Shell">
+                          <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title={t('containers.execShell')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title="Delete">
+                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title={t('containers.delete')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
                         </div>

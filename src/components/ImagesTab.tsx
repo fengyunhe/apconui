@@ -1,4 +1,5 @@
 import { useState, Fragment } from "react";
+import { useTranslation } from 'react-i18next';
 import type { Image, Container } from "../types";
 
 interface ImagesTabProps {
@@ -18,6 +19,7 @@ interface ImagesTabProps {
 }
 
 export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelete, onInspect, onTag, onPush, onCreateContainer, containers, onPrune, onRowClick }: ImagesTabProps) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [verbose, setVerbose] = useState(false);
   const [filter, setFilter] = useState("");
@@ -63,17 +65,17 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
   return (
     <div className="tab-content">
       <div className="tab-header">
-        <h2>Images</h2>
+        <h2>{t('images.title')}</h2>
         <div className="tab-actions">
           {selected.size > 0 && (
             <button className="btn btn-danger btn-sm" onClick={batchDelete}>
-              Delete ({selected.size})
+              {t('containers.delete')} ({selected.size})
             </button>
           )}
           <input
             type="text"
             className="filter-input"
-            placeholder="Filter by name, tag, digest..."
+            placeholder={t('images.filterPlaceholder')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -89,19 +91,19 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
             </svg>
-            Pull
+            {t('images.pull')}
           </button>
           <button className="btn btn-primary" onClick={onBuild}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
-            Build
+            {t('images.build')}
           </button>
           <button className="btn btn-danger btn-sm" onClick={onPrune} disabled={loading}>
-            Prune Unused
+            {t('images.pruneDangling')}
           </button>
           <button className="btn btn-secondary" onClick={onRefresh} disabled={loading}>
-            Refresh
+            {t('containers.refresh')}
           </button>
         </div>
       </div>
@@ -116,19 +118,19 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
                   onChange={toggleAll}
                 />
               </th>
-              <th>Name</th>
-              <th>Tag</th>
+              <th>{t('images.repository')}</th>
+              <th>{t('images.tag')}</th>
               <th>Digest</th>
-              <th>Size</th>
-              {verbose && <th>Created</th>}
+              <th>{t('images.size')}</th>
+              {verbose && <th>{t('containers.created_at')}</th>}
               {verbose && <th>Architectures</th>}
               {verbose && <th>Cmd</th>}
-              <th>Containers</th>
+              <th>{t('containers.image')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredImages.length === 0 ? (
-              <tr><td colSpan={verbose ? 9 : 6} className="empty-row">{images.length === 0 ? "No images" : "No match"}</td></tr>
+              <tr><td colSpan={verbose ? 9 : 6} className="empty-row">{images.length === 0 ? t('images.noImages') : t('containers.noMatch')}</td></tr>
             ) : (
               filteredImages.map((img) => {
                 const usingContainers = getContainersUsingImage(img.name, img.tag);
@@ -161,19 +163,19 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
                     <tr className="row-actions" onClick={() => onRowClick(fullName)}>
                       <td colSpan={verbose ? 9 : 6}>
                         <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
-                          <button className="btn btn-xs btn-success" onClick={() => onCreateContainer(fullName)} title="Run Container">
+                          <button className="btn btn-xs btn-success" onClick={() => onCreateContainer(fullName)} title={t('containers.run')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">
+                          <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title={t('images.tagImage')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">
+                          <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title={t('images.push')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">
+                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title={t('containers.inspect')}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>
+                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title={t('containers.delete')} disabled={usingContainers.length > 0}>
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                           </button>
                         </div>

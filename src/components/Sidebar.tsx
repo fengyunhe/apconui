@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Tab } from "../types";
 
 interface SidebarProps {
@@ -22,6 +23,8 @@ export function Sidebar({
   systemStatus, onSystemStart, onSystemStop, loading,
   collapsed, onToggleCollapse,
 }: SidebarProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={`sidebar ${collapsed ? "sidebar-collapsed" : ""}`}>
       <div className="sidebar-header">
@@ -42,7 +45,7 @@ export function Sidebar({
                 <path d="M8 12h8M12 8v8" />
               </svg>
             </div>
-            <h1 className="app-title">Apple Container</h1>
+            <h1 className="app-title">{t('app.title')}</h1>
           </>
         )}
       </div>
@@ -55,7 +58,7 @@ export function Sidebar({
           </svg>
           {!collapsed && (
             <>
-              <span>Containers</span>
+              <span>{t('sidebar.containers')}</span>
               <span className="badge">{containerCount}</span>
             </>
           )}
@@ -66,7 +69,7 @@ export function Sidebar({
           </svg>
           {!collapsed && (
             <>
-              <span>Images</span>
+              <span>{t('sidebar.images')}</span>
               <span className="badge">{imageCount}</span>
             </>
           )}
@@ -79,7 +82,7 @@ export function Sidebar({
           </svg>
           {!collapsed && (
             <>
-              <span>Volumes</span>
+              <span>{t('sidebar.volumes')}</span>
               <span className="badge">{volumeCount}</span>
             </>
           )}
@@ -91,7 +94,7 @@ export function Sidebar({
           </svg>
           {!collapsed && (
             <>
-              <span>Networks</span>
+              <span>{t('sidebar.networks')}</span>
               <span className="badge">{networkCount}</span>
             </>
           )}
@@ -104,7 +107,7 @@ export function Sidebar({
           </svg>
           {!collapsed && (
             <>
-              <span>Machines</span>
+              <span>{t('sidebar.machines')}</span>
               <span className="badge">{machineCount}</span>
             </>
           )}
@@ -114,14 +117,14 @@ export function Sidebar({
             <polyline points="4 17 10 11 4 5" />
             <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
-          {!collapsed && <span>Terminal</span>}
+          {!collapsed && <span>{t('sidebar.terminal')}</span>}
         </button>
         <button className={`nav-item ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
-          {!collapsed && <span>Settings</span>}
+          {!collapsed && <span>{t('sidebar.settings')}</span>}
         </button>
       </nav>
 
@@ -129,15 +132,15 @@ export function Sidebar({
         <div className="sidebar-footer">
           <div className="system-controls">
             <div className="system-status-row">
-              <span className="system-label">Service</span>
+              <span className="system-label">{t('sidebar.service')}</span>
               <span className={`status-dot status-dot-${systemStatus}`} title={systemStatus}></span>
             </div>
             <div className="system-buttons">
               <button className="btn btn-sm btn-success" onClick={onSystemStart} disabled={loading}>
-                Start
+                {t('sidebar.start')}
               </button>
               <button className="btn btn-sm btn-danger" onClick={onSystemStop} disabled={loading}>
-                Stop
+                {t('sidebar.stop')}
               </button>
             </div>
           </div>

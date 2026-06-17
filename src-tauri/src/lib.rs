@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager};
 
@@ -72,6 +73,121 @@ async fn run_container_cmd_async(args: Vec<String>) -> CommandResult {
                     success: false,
                     stdout: String::new(),
                     stderr: format!("Failed to execute container command: {e}"),
+                }
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StreamCommandRequest {
+    command: String,
+    event_id: String,
+}
+
+#[tauri::command]
+async fn run_container_cmd_stream(
+    app: tauri::AppHandle,
+    request: StreamCommandRequest,
+) -> CommandResult {
+    let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
+    let parts: Vec<String> = request.command.split_whitespace().map(String::from).collect();
+    let event_id = request.event_id.clone();
+
+    if parts.is_empty() {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Empty command".to_string(),
+        };
+    }
+
+    log_to_file(&format!("Running stream command: {}", request.command));
+
+    // Handle both "container logs -f ..." and "logs -f ..." formats
+    let (cmd, args) = if parts[0] == "container" && parts.len() > 1 {
+        (parts[1].clone(), parts[2..].to_vec())
+    } else {
+        (parts[0].clone(), parts[1..].to_vec())
+    };
+
+    let event_id_clone = event_id.clone();
+    let app_clone = app.clone();
+
+    tokio::task::spawn_blocking(move || {
+        use std::io::{BufRead, BufReader};
+
+        let result = Command::new("/usr/local/bin/container")
+            .arg(&cmd)
+            .args(&args)
+            .env("PATH", path)
+            .env("DOCKER_HOST", "unix:///tmp/docker.sock")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+
+        match result {
+            Ok(mut child) => {
+                let stdout = child.stdout.take().unwrap();
+                let stderr = child.stderr.take().unwrap();
+
+                let stdout_reader = BufReader::new(stdout);
+                let stderr_reader = BufReader::new(stderr);
+
+                // Read stdout in current thread
+                for line in stdout_reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            let _ = app_clone.emit(
+                                &format!("stream-output-{}", event_id_clone),
+                                json!({"line": line, "stream": "stdout"}),
+                            );
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                // Read stderr
+                for line in stderr_reader.lines() {
+                    match line {
+                        Ok(line) => {
+                            let _ = app_clone.emit(
+                                &format!("stream-output-{}", event_id_clone),
+                                json!({"line": line, "stream": "stderr"}),
+                            );
+                        }
+                        Err(_) => break,
+                    }
+                }
+
+                let status = child.wait().unwrap_or_else(|_| std::process::ExitStatus::from_raw(1));
+                let _ = app_clone.emit(
+                    &format!("stream-complete-{}", event_id_clone),
+                    json!({"success": status.success()}),
+                );
+
+                CommandResult {
+                    success: status.success(),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            }
+            Err(e) => {
+                log_to_file(&format!("Failed to spawn command: {e}"));
+                let _ = app.emit(
+                    &format!("stream-complete-{}", event_id),
+                    json!({"success": false, "error": e.to_string()}),
+                );
+                CommandResult {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: format!("Failed to execute command: {e}"),
                 }
             }
         }
@@ -2096,6 +2212,7 @@ pub fn run() {
             set_default_machine,
             run_machine_command,
             run_raw_command,
+            run_container_cmd_stream,
             cancel_pull,
             open_url,
             get_docker_socket_path,

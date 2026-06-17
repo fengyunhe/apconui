@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from 'react-i18next';
 import type { CommandResult } from "../types";
 import { Modal } from "./Modal";
 
@@ -9,6 +10,7 @@ interface LogsModalProps {
 }
 
 export function LogsModal({ containerId, onClose }: LogsModalProps) {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState("");
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [lines, setLines] = useState("200");
@@ -44,7 +46,7 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
 
   return (
     <Modal onClose={onClose}>
-      <h2>Container Logs: {containerId.substring(0, 12)}</h2>
+      <h2>{t('logs.title')}: {containerId.substring(0, 12)}</h2>
       <div className="form-group" style={{ marginBottom: 12 }}>
         <label>Lines</label>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -55,7 +57,7 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
             timerRef.current = setTimeout(() => fetchLogs(val), 500);
           }} style={{ width: 80 }} placeholder="200" />
           <button className="btn btn-sm btn-secondary" onClick={() => fetchLogs()} disabled={loadingLogs}>
-            {loadingLogs ? "Loading..." : "Refresh"}
+            {loadingLogs ? "Loading..." : t('logs.refresh')}
           </button>
         </div>
       </div>
@@ -63,7 +65,7 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
         <pre ref={logsRef}>{loadingLogs ? "Loading..." : logs}</pre>
       </div>
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        <button className="btn btn-secondary" onClick={onClose}>{t('modal.close')}</button>
       </div>
     </Modal>
   );

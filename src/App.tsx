@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 // PERF: memoized counts
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
+import { useTranslation } from 'react-i18next';
 import type { CommandResult, Container, Volume, Network, Tab } from "./types";
 import { useToast } from "./hooks/useToast";
 import { TOAST_ERROR, TOAST_SUCCESS } from "./utils";
@@ -37,6 +38,7 @@ import { TaskPanel } from "./components/TaskPanel";
 import "./App.css";
 
 function App() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
   const [systemStatus, setSystemStatus] = useState<string>("unknown");
@@ -270,7 +272,7 @@ function App() {
     try {
       const result = await invoke<CommandResult>("system_start");
       if (result.success) {
-        showToast("success", "System started");
+        showToast("success", t('toast.systemStarted'));
         handleCheckSystemStatus();
       } else {
         showToast("error", result.stderr);
@@ -283,12 +285,12 @@ function App() {
   };
 
   const handleSystemStop = async () => {
-    if (!await confirm("Stop the container system service? All running containers will be affected.")) return;
+    if (!await confirm(t('confirm.stopSystem'))) return;
     setLoading(true);
     try {
       const result = await invoke<CommandResult>("system_stop");
       if (result.success) {
-        showToast("success", "System stopped");
+        showToast("success", t('toast.systemStopped'));
         handleCheckSystemStatus();
       } else {
         showToast("error", result.stderr);
@@ -752,11 +754,11 @@ function App() {
 
       {confirmDialog.show && (
         <Modal onClose={cancelConfirm}>
-          <h2>Confirm</h2>
+          <h2>{t('confirm.title')}</h2>
           <p style={{ marginBottom: 20, color: "var(--text-primary)" }}>{confirmDialog.message}</p>
           <div className="modal-actions">
-            <button className="btn btn-secondary" onClick={cancelConfirm}>Cancel</button>
-            <button className="btn btn-danger" onClick={confirmDialog.onConfirm}>Confirm</button>
+            <button className="btn btn-secondary" onClick={cancelConfirm}>{t('modal.cancel')}</button>
+            <button className="btn btn-danger" onClick={confirmDialog.onConfirm}>{t('modal.confirm')}</button>
           </div>
         </Modal>
       )}

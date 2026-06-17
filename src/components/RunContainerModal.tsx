@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from 'react-i18next';
 import type { CommandResult, Image, Network } from "../types";
 import { Modal } from "./Modal";
 
@@ -12,6 +13,7 @@ interface RunContainerModalProps {
 }
 
 export function RunContainerModal({ images, networks, initialImage, onClose, onRun }: RunContainerModalProps) {
+  const { t } = useTranslation();
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [image, setImage] = useState(initialImage || (images[0] ? `${images[0].name}:${images[0].tag}` : ""));
   const [name, setName] = useState("");
@@ -64,10 +66,10 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
 
   return (
     <Modal onClose={onClose}>
-      <h2>Run Container</h2>
+      <h2>{t('runContainer.title')}</h2>
       <div className="form-grid">
         <div className="form-group">
-          <label>Image *</label>
+          <label>{t('runContainer.image')} *</label>
           <div style={{ position: "relative" }}>
             <input
               value={image}
@@ -92,7 +94,7 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
           </div>
         </div>
         <div className="form-group">
-          <label>Name</label>
+          <label>{t('runContainer.name')}</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-container" />
         </div>
         <div className="form-group">
@@ -104,15 +106,15 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
           <input value={memory} onChange={(e) => setMemory(e.target.value)} placeholder="512M" />
         </div>
         <div className="form-group">
-          <label>Ports (comma sep)</label>
+          <label>{t('runContainer.ports')}</label>
           <input value={ports} onChange={(e) => setPorts(e.target.value)} placeholder="8080:80,3000:3000" />
         </div>
         <div className="form-group">
-          <label>Volumes (comma sep)</label>
+          <label>{t('runContainer.volumes')}</label>
           <input value={volumes} onChange={(e) => setVolumes(e.target.value)} placeholder="/host:/container" />
         </div>
         <div className="form-group" style={{ gridColumn: "1 / -1" }}>
-          <label>Environment (comma sep)</label>
+          <label>{t('runContainer.env')}</label>
           <textarea
             value={envs}
             onChange={(e) => setEnvs(e.target.value)}
@@ -122,7 +124,7 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
           />
         </div>
         <div className="form-group">
-          <label>Network</label>
+          <label>{t('runContainer.network')}</label>
           <select value={network} onChange={(e) => setNetwork(e.target.value)}>
             <option value="">Default</option>
             {networks.map((n) => (
@@ -204,7 +206,7 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
       )}
 
       <div className="modal-actions">
-        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-secondary" onClick={onClose}>{t('modal.cancel')}</button>
         <button className="btn btn-primary" onClick={() => onRun({
           image, name: name || null, detach, rm, cpus: cpus || null, memory: memory || null,
           ports: ports || null, envs: envs || null, volumes: volumes || null, network: network || null,
@@ -215,7 +217,7 @@ export function RunContainerModal({ images, networks, initialImage, onClose, onR
           os: null, platform: null, readOnly, rosetta, runtime: runtime || null,
           ssh, shmSize: shmSize || null, tmpfs: null, ulimit: null, user: user || null,
           maxConcurrentDownloads: null, progress: null,
-        })} disabled={!image}>Run</button>
+        })} disabled={!image}>{t('runContainer.run')}</button>
       </div>
     </Modal>
   );
