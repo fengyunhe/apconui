@@ -161,9 +161,26 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
                     <td>{c.ip || "-"}</td>
                     <td className="cell-ports">
                       {c.ports ? c.ports.split(",").map((p, i) => {
-                        const match = p.trim().match(/^(\d+):/);
-                        const hostPort = match ? match[1] : null;
-                        return hostPort ? (
+                        const trimmed = p.trim();
+                        // Check for host port mapping (e.g., "8080:80" or "8080:80/tcp")
+                        const hostMatch = trimmed.match(/^(\d+):(\d+)/);
+                        // Check for container-only port (e.g., "80/tcp" or "80")
+                        const containerMatch = trimmed.match(/^(\d+)/);
+
+                        let url = "";
+                        let title = "";
+
+                        if (hostMatch) {
+                          // Port is mapped to host - use localhost
+                          url = `http://localhost:${hostMatch[1]}`;
+                          title = `Open http://localhost:${hostMatch[1]}`;
+                        } else if (containerMatch && c.ip) {
+                          // Port is only exposed - use container IP
+                          url = `http://${c.ip}:${containerMatch[1]}`;
+                          title = `Open http://${c.ip}:${containerMatch[1]}`;
+                        }
+
+                        return url ? (
                           <span key={i}>
                             {i > 0 && ", "}
                             <a
@@ -172,14 +189,14 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                invoke<CommandResult>("open_url", { url: `http://localhost:${hostPort}` });
+                                invoke<CommandResult>("open_url", { url });
                               }}
-                              title={`Open http://localhost:${hostPort}`}
+                              title={title}
                             >
-                              {p.trim()}
+                              {trimmed}
                             </a>
                           </span>
-                        ) : <span key={i}>{i > 0 && ", "}{p.trim()}</span>;
+                        ) : <span key={i}>{i > 0 && ", "}{trimmed}</span>;
                       }) : "-"}
                     </td>
                     <td className="cell-resources">
