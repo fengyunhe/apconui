@@ -429,11 +429,14 @@ function App() {
             try {
               // Check if image exists locally
               const checkResult = await invoke<CommandResult>("image_exists_locally", { reference: imageRef });
+              console.log(`[Run] ${imageRef} exists locally: ${checkResult.success}`);
 
               if (!checkResult.success) {
                 // Image doesn't exist locally, pull it first
                 emit("pull-start", imageRef);
+                console.log(`[Run] Pulling ${imageRef}...`);
                 const pullResult = await invoke<CommandResult>("pull_image", { reference: imageRef });
+                console.log(`[Run] Pull ${imageRef} result:`, pullResult.success, pullResult.stderr);
 
                 if (!pullResult.success) {
                   showToast("error", `Failed to pull image: ${pullResult.stderr}`);
@@ -442,7 +445,9 @@ function App() {
               }
 
               // Now run the container
+              console.log(`[Run] Starting container for ${imageRef}...`);
               const result = await invoke<CommandResult>("run_container", config);
+              console.log(`[Run] Container start result:`, result.success, result.stderr);
               if (result.success) {
                 showToast("success", "Container started");
                 refreshContainers();
@@ -450,6 +455,7 @@ function App() {
                 showToast("error", result.stderr);
               }
             } catch (e) {
+              console.error(`[Run] Error:`, e);
               showToast("error", String(e));
             }
           }}

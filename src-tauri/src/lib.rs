@@ -686,6 +686,7 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
                 pid,
                 cancelled: cancelled_clone,
             });
+            log_to_file(&format!("Registered pull task: {} (pid: {})", task_id, pid));
         }
 
         let stderr = child.stderr.take().unwrap();
@@ -729,6 +730,7 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
         {
             let mut pulls = ACTIVE_PULLS.lock().unwrap();
             pulls.remove(&task_id);
+            log_to_file(&format!("Removed pull task: {}", task_id));
         }
 
         let status = child.wait().unwrap_or_else(|e| {
@@ -736,6 +738,7 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
             std::process::ExitStatus::default()
         });
 
+        log_to_file(&format!("Pull {} completed: success={}", ref_clone, status.success()));
         let _ = app.emit("pull-complete", &json!({"reference": ref_clone, "success": status.success()}));
 
         CommandResult {
