@@ -7,7 +7,7 @@ interface FileEditorModalProps {
   containerId: string;
   initialPath?: string;
   onClose: () => void;
-  showToast: (type: "success" | "error" | "info", message: string) => void;
+  showToast: (type: "success" | "error", message: string) => void;
 }
 
 interface FileEntry {
@@ -32,7 +32,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const pathInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadFiles = useCallback(async (path: string) => {
     setLoading(true);
