@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
@@ -6,10 +7,18 @@ use tauri::{Emitter, Manager};
 
 mod docker_proxy;
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
-static PULL_CANCELLED: AtomicBool = AtomicBool::new(false);
-static PULL_PID: AtomicU32 = AtomicU32::new(0);
+struct PullTaskState {
+    pid: u32,
+    cancelled: Arc<AtomicBool>,
+}
+
+lazy_static::lazy_static! {
+    static ref ACTIVE_PULLS: Mutex<HashMap<String, PullTaskState>> = Mutex::new(HashMap::new());
+}
 
 fn leak(s: String) -> &'static str {
     Box::leak(s.into_boxed_str())
@@ -76,28 +85,29 @@ async fn run_container_cmd_async(args: Vec<String>) -> CommandResult {
 }
 
 #[tauri::command]
-fn cancel_pull() -> CommandResult {
-    let pid = PULL_PID.load(Ordering::SeqCst);
-    if pid == 0 {
-        return CommandResult {
+fn cancel_pull(reference: String) -> CommandResult {
+    let mut pulls = ACTIVE_PULLS.lock().unwrap();
+
+    if let Some(state) = pulls.remove(&reference) {
+        // Set cancellation flag
+        state.cancelled.store(true, Ordering::SeqCst);
+
+        // Kill the process directly
+        let _ = unsafe {
+            libc::kill(-(state.pid as i32), libc::SIGTERM)
+        };
+
+        CommandResult {
+            success: true,
+            stdout: format!("Pull cancelled: {reference}"),
+            stderr: String::new(),
+        }
+    } else {
+        CommandResult {
             success: false,
             stdout: String::new(),
-            stderr: "No pull in progress".to_string(),
-        };
-    }
-
-    // Set cancellation flag - the pull loop will check this and kill the process
-    PULL_CANCELLED.store(true, Ordering::SeqCst);
-
-    // Also kill the process directly as a backup
-    let _ = unsafe {
-        libc::kill(-(pid as i32), libc::SIGTERM)
-    };
-
-    CommandResult {
-        success: true,
-        stdout: "Pull cancellation requested".to_string(),
-        stderr: String::new(),
+            stderr: format!("No pull found for: {reference}"),
+        }
     }
 }
 
@@ -640,9 +650,11 @@ async fn image_exists_locally(reference: String) -> CommandResult {
 async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
     let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
     let ref_clone = reference.clone();
+    let task_id = reference.clone();
 
-    // Reset cancellation flag
-    PULL_CANCELLED.store(false, Ordering::SeqCst);
+    // Create per-task cancellation flag
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancelled_clone = cancelled.clone();
 
     tokio::task::spawn_blocking(move || {
         log_to_file(&format!("Pulling image: {}", ref_clone));
@@ -665,18 +677,30 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
         };
 
         // Store PID for cancellation
-        PULL_PID.store(child.id(), Ordering::SeqCst);
+        let pid = child.id();
+
+        // Register in active pulls
+        {
+            let mut pulls = ACTIVE_PULLS.lock().unwrap();
+            pulls.insert(task_id.clone(), PullTaskState {
+                pid,
+                cancelled: cancelled_clone,
+            });
+        }
 
         let stderr = child.stderr.take().unwrap();
         let reader = BufReader::new(stderr);
         let mut last_progress = String::new();
 
         for line in reader.lines() {
-            // Check if cancelled
-            if PULL_CANCELLED.load(Ordering::SeqCst) {
-                log_to_file("Pull cancelled by user");
+            // Check if this specific task is cancelled
+            if cancelled.load(Ordering::SeqCst) {
+                log_to_file(&format!("Pull cancelled: {}", ref_clone));
                 let _ = child.kill();
-                let _ = app.emit("pull-complete", false);
+                let _ = app.emit("pull-complete", &json!({"reference": ref_clone, "success": false}));
+                // Remove from active pulls
+                let mut pulls = ACTIVE_PULLS.lock().unwrap();
+                pulls.remove(&task_id);
                 return CommandResult {
                     success: false,
                     stdout: String::new(),
@@ -691,19 +715,8 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
                         continue;
                     }
 
-                    if line.contains("error") || line.contains("Error") || line.contains("failed") {
-                        let _ = app.emit("pull-progress", &line);
-                        last_progress = line.clone();
-                    } else if line.contains("extracting") || line.contains("copying") || line.contains("Downloading") || line.contains("Extracting") {
-                        let _ = app.emit("pull-progress", &line);
-                        last_progress = line.clone();
-                    } else if line.contains("%") || line.contains("done") || line.contains("complete") {
-                        let _ = app.emit("pull-progress", &line);
-                        last_progress = line.clone();
-                    } else {
-                        let _ = app.emit("pull-progress", &line);
-                        last_progress = line.clone();
-                    }
+                    let _ = app.emit("pull-progress", &json!({"reference": ref_clone, "message": line}));
+                    last_progress = line.clone();
                 }
                 Err(e) => {
                     log_to_file(&format!("Error reading pull output: {e}"));
@@ -712,15 +725,18 @@ async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
             }
         }
 
-        // Clear PID
-        PULL_PID.store(0, Ordering::SeqCst);
+        // Remove from active pulls
+        {
+            let mut pulls = ACTIVE_PULLS.lock().unwrap();
+            pulls.remove(&task_id);
+        }
 
         let status = child.wait().unwrap_or_else(|e| {
             log_to_file(&format!("Error waiting for pull: {e}"));
             std::process::ExitStatus::default()
         });
 
-        let _ = app.emit("pull-complete", status.success());
+        let _ = app.emit("pull-complete", &json!({"reference": ref_clone, "success": status.success()}));
 
         CommandResult {
             success: status.success(),

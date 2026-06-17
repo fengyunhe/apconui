@@ -22,5 +22,6 @@ tauri = { version = "2", default-features = false, features = ["wry"] }
 tokio = { version = "1", features = ["rt", "net", "io-util"] }
 libc = "0.2"
 open = "5"
+lazy_static = "1"
 
 [workspace]

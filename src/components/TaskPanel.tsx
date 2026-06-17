@@ -22,9 +22,9 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
     setTasks((prev) => [...prev, newTask]);
   }, []);
 
-  const updateTask = useCallback((progress: string) => {
+  const updateTask = useCallback((reference: string, progress: string) => {
     setTasks((prev) => {
-      const idx = prev.findIndex((task) => task.status === "running");
+      const idx = prev.findIndex((task) => task.reference === reference && task.status === "running");
       if (idx === -1) return prev;
       const next = [...prev];
       next[idx] = { ...next[idx], progress };
@@ -32,9 +32,9 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
     });
   }, []);
 
-  const completeTask = useCallback((success: boolean) => {
+  const completeTask = useCallback((reference: string, success: boolean) => {
     setTasks((prev) => {
-      const idx = prev.findIndex((task) => task.status === "running");
+      const idx = prev.findIndex((task) => task.reference === reference && task.status === "running");
       if (idx === -1) return prev;
       const next = [...prev];
       next[idx] = { ...next[idx], status: success ? "completed" : "failed" };
@@ -43,11 +43,11 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
     onTaskComplete?.();
   }, [onTaskComplete]);
 
-  const cancelTask = useCallback(async (taskId: string) => {
+  const cancelTask = useCallback(async (reference: string) => {
     try {
-      await invoke("cancel_pull");
+      await invoke("cancel_pull", { reference });
       setTasks((prev) => {
-        const idx = prev.findIndex((task) => task.id === taskId);
+        const idx = prev.findIndex((task) => task.reference === reference && task.status === "running");
         if (idx === -1) return prev;
         const next = [...prev];
         next[idx] = { ...next[idx], status: "failed", error: "Cancelled by user" };
@@ -71,12 +71,12 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
       addTask(event.payload);
     });
 
-    const unlistenProgress = listen<string>("pull-progress", (event) => {
-      updateTask(event.payload);
+    const unlistenProgress = listen<{reference: string; message: string}>("pull-progress", (event) => {
+      updateTask(event.payload.reference, event.payload.message);
     });
 
-    const unlistenComplete = listen<boolean>("pull-complete", (event) => {
-      completeTask(event.payload);
+    const unlistenComplete = listen<{reference: string; success: boolean}>("pull-complete", (event) => {
+      completeTask(event.payload.reference, event.payload.success);
     });
 
     return () => {
@@ -174,7 +174,7 @@ export function TaskPanel({ onTaskComplete }: TaskPanelProps) {
                         <div className="progress-bar-indeterminate"></div>
                       </div>
                       <p className="progress-text">{task.progress}</p>
-                      <button className="btn btn-danger btn-xs task-cancel-btn" onClick={() => cancelTask(task.id)}>
+                      <button className="btn btn-danger btn-xs task-cancel-btn" onClick={() => cancelTask(task.reference)}>
                         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
                           <line x1="18" y1="6" x2="6" y2="18"/>
                           <line x1="6" y1="6" x2="18" y2="18"/>
