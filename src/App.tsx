@@ -683,18 +683,21 @@ function App() {
           onAction={handleContainerAction}
           onLogs={(id) => { setLogsContainerId(id); setShowLogsModal(true); }}
           onExec={handleExec}
-          onImageClick={(imgName) => {
-            setLoading(true);
-            setDetailView("image");
-            invoke<CommandResult>("inspect_image", { name: imgName }).then((r) => {
+          onImageClick={async (imgName) => {
+            setDetailLoading(true);
+            try {
+              const r = await invoke<CommandResult>("inspect_image", { name: imgName });
               if (r.success) {
-                try { setDetailData(JSON.parse(r.stdout)); } catch { setDetailData(null); }
+                try {
+                  const parsed = JSON.parse(r.stdout);
+                  setDetailData(Array.isArray(parsed) ? parsed[0] : parsed);
+                  setDetailView("image");
+                } catch { setDetailData(null); }
               } else {
                 showToast("error", r.stderr);
-                setDetailView(null);
               }
-            }).catch((e) => { showToast("error", String(e)); setDetailView(null); })
-              .finally(() => setLoading(false));
+            } catch (e) { showToast("error", String(e)); }
+            finally { setDetailLoading(false); }
           }}
         />
       )}
@@ -707,21 +710,21 @@ function App() {
           onBack={() => { setDetailView(null); setDetailData(null); }}
           onTag={(name) => { setTagImageSource(name); setShowTagModal(true); }}
           onPush={(name) => { setPushImageRef(name); setShowPushModal(true); }}
-          onContainerClick={(containerId) => {
-            setLoading(true);
-            setDetailView("container");
-            invoke<CommandResult>("inspect_container", { id: containerId }).then((r) => {
+          onContainerClick={async (containerId) => {
+            setDetailLoading(true);
+            try {
+              const r = await invoke<CommandResult>("inspect_container", { id: containerId });
               if (r.success) {
                 try {
                   const parsed = JSON.parse(r.stdout);
                   setDetailData(Array.isArray(parsed) ? parsed[0] : parsed);
+                  setDetailView("container");
                 } catch { setDetailData(null); }
               } else {
                 showToast("error", r.stderr);
-                setDetailView(null);
               }
-            }).catch((e) => { showToast("error", String(e)); setDetailView(null); })
-              .finally(() => setLoading(false));
+            } catch (e) { showToast("error", String(e)); }
+            finally { setDetailLoading(false); }
           }}
         />
       )}
