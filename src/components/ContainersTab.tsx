@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Container, CommandResult } from "../types";
 
@@ -137,105 +137,95 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
           </thead>
           <tbody>
             {filteredContainers.length === 0 ? (
-              <tr><td colSpan={10} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
+              <tr><td colSpan={9} className="empty-row">{containers.length === 0 ? "No containers" : "No match"}</td></tr>
             ) : (
               filteredContainers.map((c) => {
                 const memMB = c.memoryBytes > 0 ? (c.memoryBytes / 1024 / 1024).toFixed(0) : null;
                 return (
-                  <tr key={c.id} className={c.state === "running" ? "row-running" : ""} style={{ cursor: "pointer" }} onClick={() => onRowClick(c.id)}>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(c.id)}
-                        onChange={() => toggleSelect(c.id)}
-                      />
-                    </td>
-                    <td className="cell-id">{c.id.substring(0, 12)}</td>
-                    <td className="cell-image">{c.image}</td>
-                    <td className="cell-command" title={c.command}>{c.command || "-"}</td>
-                    <td>
-                      <span className={`status-badge status-${c.state}`}>
-                        {c.state}
-                      </span>
-                    </td>
-                    <td>{c.ip || "-"}</td>
-                    <td className="cell-ports">
-                      {c.ports ? c.ports.split(",").map((p, i) => {
-                        const trimmed = p.trim();
-                        // Check for host port mapping (e.g., "8080:80" or "8080:80/tcp")
-                        const hostMatch = trimmed.match(/^(\d+):(\d+)/);
-                        // Check for container-only port (e.g., "80/tcp" or "80")
-                        const containerMatch = trimmed.match(/^(\d+)/);
-
-                        let url = "";
-                        let title = "";
-
-                        if (hostMatch) {
-                          // Port is mapped to host - use localhost
-                          url = `http://localhost:${hostMatch[1]}`;
-                          title = `Open http://localhost:${hostMatch[1]}`;
-                        } else if (containerMatch && c.ip) {
-                          // Port is only exposed - use container IP
-                          url = `http://${c.ip}:${containerMatch[1]}`;
-                          title = `Open http://${c.ip}:${containerMatch[1]}`;
-                        }
-
-                        return url ? (
-                          <span key={i}>
-                            {i > 0 && ", "}
-                            <a
-                              href="#"
-                              className="port-link"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                invoke<CommandResult>("open_url", { url });
-                              }}
-                              title={title}
-                            >
-                              {trimmed}
-                            </a>
-                          </span>
-                        ) : <span key={i}>{i > 0 && ", "}{trimmed}</span>;
-                      }) : "-"}
-                    </td>
-                    <td className="cell-resources">
-                      {c.cpus > 0 || memMB ? (
-                        <span title={`CPU: ${c.cpus || "-"} cores, Memory: ${memMB ? memMB + " MB" : "-"}`}>
-                          {c.cpus > 0 ? `${c.cpus} CPU` : ""}{c.cpus > 0 && memMB ? " / " : ""}{memMB ? `${memMB} MB` : ""}
+                  <Fragment key={c.id}>
+                    <tr className={c.state === "running" ? "row-running" : ""} style={{ cursor: "pointer" }} onClick={() => onRowClick(c.id)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(c.id)}
+                          onChange={() => toggleSelect(c.id)}
+                        />
+                      </td>
+                      <td className="cell-id">{c.id.substring(0, 12)}</td>
+                      <td className="cell-image">{c.image}</td>
+                      <td className="cell-command" title={c.command}>{c.command || "-"}</td>
+                      <td>
+                        <span className={`status-badge status-${c.state}`}>
+                          {c.state}
                         </span>
-                      ) : "-"}
-                    </td>
-                    <td>{c.created || "-"}</td>
-                    <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
-                      {c.state === "running" ? (
-                        <>
-                          <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                      </td>
+                      <td>{c.ip || "-"}</td>
+                      <td className="cell-ports">
+                        {c.ports ? c.ports.split(",").map((p, i) => {
+                          const trimmed = p.trim();
+                          const hostMatch = trimmed.match(/^(\d+):(\d+)/);
+                          const containerMatch = trimmed.match(/^(\d+)/);
+                          let url = "";
+                          let title = "";
+                          if (hostMatch) {
+                            url = `http://localhost:${hostMatch[1]}`;
+                            title = `Open http://localhost:${hostMatch[1]}`;
+                          } else if (containerMatch && c.ip) {
+                            url = `http://${c.ip}:${containerMatch[1]}`;
+                            title = `Open http://${c.ip}:${containerMatch[1]}`;
+                          }
+                          return url ? (
+                            <span key={i}>
+                              {i > 0 && ", "}
+                              <a href="#" className="port-link" onClick={(e) => { e.preventDefault(); e.stopPropagation(); invoke<CommandResult>("open_url", { url }); }} title={title}>
+                                {trimmed}
+                              </a>
+                            </span>
+                          ) : <span key={i}>{i > 0 && ", "}{trimmed}</span>;
+                        }) : "-"}
+                      </td>
+                      <td className="cell-resources">
+                        {c.cpus > 0 || memMB ? (
+                          <span title={`CPU: ${c.cpus || "-"} cores, Memory: ${memMB ? memMB + " MB" : "-"}`}>
+                            {c.cpus > 0 ? `${c.cpus} CPU` : ""}{c.cpus > 0 && memMB ? " / " : ""}{memMB ? `${memMB} MB` : ""}
+                          </span>
+                        ) : "-"}
+                      </td>
+                      <td>{c.created || "-"}</td>
+                    </tr>
+                    <tr className="row-actions" onClick={() => onRowClick(c.id)}>
+                      <td colSpan={9}>
+                        <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                          {c.state === "running" ? (
+                            <>
+                              <button className="btn btn-xs btn-warning" onClick={() => onStop(c.id)} title="Stop">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                              </button>
+                              <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title="Kill">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                              </button>
+                            </>
+                          ) : (
+                            <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title="Start">
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            </button>
+                          )}
+                          <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title="Logs">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                           </button>
-                          <button className="btn btn-xs btn-danger" onClick={() => onKill(c.id)} title="Kill">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title="Inspect">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                           </button>
-                        </>
-                      ) : (
-                        <button className="btn btn-xs btn-success" onClick={() => onStart(c.id)} title="Start">
-                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        </button>
-                      )}
-                      <button className="btn btn-xs btn-info" onClick={() => onLogs(c.id)} title="Logs">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(c.id)} title="Inspect">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title="Exec Shell">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title="Delete">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                      </button>
-                    </td>
-                  </tr>
+                          <button className="btn btn-xs btn-success" onClick={() => onExec(c.id)} title="Exec Shell">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(c.id)} title="Delete">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })
             )}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import type { Image, Container } from "../types";
 
 interface ImagesTabProps {
@@ -129,52 +129,58 @@ export function ImagesTab({ images, loading, onRefresh, onPull, onBuild, onDelet
           </thead>
           <tbody>
             {filteredImages.length === 0 ? (
-              <tr><td colSpan={verbose ? 10 : 7} className="empty-row">{images.length === 0 ? "No images" : "No match"}</td></tr>
+              <tr><td colSpan={verbose ? 9 : 6} className="empty-row">{images.length === 0 ? "No images" : "No match"}</td></tr>
             ) : (
               filteredImages.map((img) => {
                 const usingContainers = getContainersUsingImage(img.name, img.tag);
                 const fullName = `${img.name}:${img.tag}`;
                 return (
-                  <tr key={fullName} style={{ cursor: "pointer" }} onClick={() => onRowClick(fullName)}>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(fullName)}
-                        onChange={() => toggleSelect(fullName)}
-                      />
-                    </td>
-                    <td>{img.name}</td>
-                    <td><span className="tag-badge">{img.tag}</span></td>
-                    <td className="cell-digest">{img.digest}</td>
-                    <td>{img.size}</td>
-                    {verbose && <td>{img.created || "-"}</td>}
-                    {verbose && <td>{img.architectures?.join(", ") || "-"}</td>}
-                    {verbose && <td className="cell-cmd">{img.cmd?.join(" ") || "-"}</td>}
-                    <td>
-                      {usingContainers.length > 0 ? (
-                        <span className="badge badge-info">{usingContainers.length} running</span>
-                      ) : (
-                        <span className="text-muted">-</span>
-                      )}
-                    </td>
-                    <td className="cell-actions" onClick={(e) => e.stopPropagation()}>
-                      <button className="btn btn-xs btn-success" onClick={() => onCreateContainer(fullName)} title="Run Container">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                      </button>
-                      <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                      </button>
-                    </td>
-                  </tr>
+                  <Fragment key={fullName}>
+                    <tr style={{ cursor: "pointer" }} onClick={() => onRowClick(fullName)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(fullName)}
+                          onChange={() => toggleSelect(fullName)}
+                        />
+                      </td>
+                      <td>{img.name}</td>
+                      <td><span className="tag-badge">{img.tag}</span></td>
+                      <td className="cell-digest">{img.digest}</td>
+                      <td>{img.size}</td>
+                      {verbose && <td>{img.created || "-"}</td>}
+                      {verbose && <td>{img.architectures?.join(", ") || "-"}</td>}
+                      {verbose && <td className="cell-cmd">{img.cmd?.join(" ") || "-"}</td>}
+                      <td>
+                        {usingContainers.length > 0 ? (
+                          <span className="badge badge-info">{usingContainers.length} running</span>
+                        ) : (
+                          <span className="text-muted">-</span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className="row-actions" onClick={() => onRowClick(fullName)}>
+                      <td colSpan={verbose ? 9 : 6}>
+                        <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
+                          <button className="btn btn-xs btn-success" onClick={() => onCreateContainer(fullName)} title="Run Container">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-info" onClick={() => onTag(fullName)} title="Tag">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-success" onClick={() => onPush(fullName)} title="Push">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-secondary" onClick={() => onInspect(fullName)} title="Inspect">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                          </button>
+                          <button className="btn btn-xs btn-danger" onClick={() => onDelete(fullName)} title="Delete" disabled={usingContainers.length > 0}>
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })
             )}

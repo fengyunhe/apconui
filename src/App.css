@@ -292,6 +292,16 @@ body {
   white-space: nowrap;
 }
 
+.row-actions td {
+  padding: 4px 12px 8px !important;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.row-actions:hover td {
+  background: var(--bg-secondary);
+}
+
 .empty-row {
   text-align: center;
   color: var(--text-muted);
