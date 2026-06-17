@@ -35,6 +35,7 @@ import { ContainerDetail } from "./components/ContainerDetail";
 import { ImageDetail } from "./components/ImageDetail";
 import { Modal } from "./components/Modal";
 import { TaskPanel } from "./components/TaskPanel";
+import { FileEditorModal } from "./components/FileEditorModal";
 import "./App.css";
 
 function App() {
@@ -77,6 +78,9 @@ function App() {
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
+  const [showFileEditor, setShowFileEditor] = useState(false);
+  const [fileEditorContainerId, setFileEditorContainerId] = useState("");
+  const [fileEditorPath, setFileEditorPath] = useState("/");
 
   const handleSidebarToggle = useCallback(() => {
     setSidebarCollapsed(prev => {
@@ -187,6 +191,12 @@ function App() {
     } catch (e) {
       showToast("error", String(e));
     }
+  };
+
+  const handleFileEditor = (id: string, path?: string) => {
+    setFileEditorContainerId(id);
+    setFileEditorPath(path || "/");
+    setShowFileEditor(true);
   };
 
   const showContainerDetail = async (id: string) => {
@@ -720,6 +730,7 @@ function App() {
           onAction={handleContainerAction}
           onLogs={(id) => { setLogsContainerId(id); setShowLogsModal(true); }}
           onExec={handleExec}
+          onFiles={handleFileEditor}
           onImageClick={async (imgName) => {
             setDetailLoading(true);
             try {
@@ -775,6 +786,15 @@ function App() {
             <button className="btn btn-danger" onClick={confirmDialog.onConfirm}>{t('modal.confirm')}</button>
           </div>
         </Modal>
+      )}
+
+      {showFileEditor && (
+        <FileEditorModal
+          containerId={fileEditorContainerId}
+          initialPath={fileEditorPath}
+          onClose={() => setShowFileEditor(false)}
+          showToast={showToast}
+        />
       )}
 
       <TaskPanel onTaskComplete={refreshImages} />

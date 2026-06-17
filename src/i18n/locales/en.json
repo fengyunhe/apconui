@@ -243,5 +243,15 @@
   },
   "taskPanel": {
     "title": "Task Panel"
+  },
+  "fileEditor": {
+    "title": "File Editor",
+    "save": "Save",
+    "close": "Close",
+    "delete": "Delete",
+    "loading": "Loading...",
+    "empty": "No files",
+    "saved": "File saved: {{path}}",
+    "deleted": "Deleted: {{name}}"
   }
 }

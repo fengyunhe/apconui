@@ -243,5 +243,15 @@
   },
   "taskPanel": {
     "title": "任务面板"
+  },
+  "fileEditor": {
+    "title": "文件编辑器",
+    "save": "保存",
+    "close": "关闭",
+    "delete": "删除",
+    "loading": "加载中...",
+    "empty": "无文件",
+    "saved": "文件已保存: {{path}}",
+    "deleted": "已删除: {{name}}"
   }
 }

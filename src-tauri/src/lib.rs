@@ -741,6 +741,37 @@ async fn export_container(id: String, output: Option<String>) -> CommandResult {
 }
 
 #[tauri::command]
+async fn list_container_files(id: String, path: String) -> CommandResult {
+    run_container_cmd_async(vec!["exec".into(), id, "ls".into(), "-la".into(), path]).await
+}
+
+#[tauri::command]
+async fn read_container_file(id: String, path: String) -> CommandResult {
+    run_container_cmd_async(vec!["exec".into(), id, "cat".into(), path]).await
+}
+
+#[tauri::command]
+async fn write_container_file(id: String, path: String, content: String) -> CommandResult {
+    let cmd = format!("cat > {} << 'ENDOFFILE'\n{}\nENDOFFILE", path, content);
+    run_container_cmd_async(vec!["exec".into(), id, "sh".into(), "-c".into(), cmd]).await
+}
+
+#[tauri::command]
+async fn delete_container_file(id: String, path: String) -> CommandResult {
+    run_container_cmd_async(vec!["exec".into(), id, "rm".into(), path]).await
+}
+
+#[tauri::command]
+async fn make_container_dir(id: String, path: String) -> CommandResult {
+    run_container_cmd_async(vec!["exec".into(), id, "mkdir".into(), "-p".into(), path]).await
+}
+
+#[tauri::command]
+async fn list_container_dirs(id: String, path: String) -> CommandResult {
+    run_container_cmd_async(vec!["exec".into(), id, "sh".into(), "-c".into(), format!("find {} -maxdepth 1 -type d 2>/dev/null | sort", path)]).await
+}
+
+#[tauri::command]
 async fn prune_containers() -> CommandResult {
     run_container_cmd_async(vec!["prune".into()]).await
 }
@@ -2263,6 +2294,12 @@ pub fn run() {
             copy_from_container,
             copy_to_container,
             export_container,
+            list_container_files,
+            read_container_file,
+            write_container_file,
+            delete_container_file,
+            make_container_dir,
+            list_container_dirs,
             list_images,
             image_exists_locally,
             pull_image,

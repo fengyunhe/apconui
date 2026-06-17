@@ -9,10 +9,11 @@ interface ContainerDetailProps {
   onAction: (action: string, id: string) => void;
   onLogs: (id: string) => void;
   onExec: (id: string) => void;
+  onFiles: (id: string) => void;
   onImageClick?: (name: string) => void;
 }
 
-export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec, onImageClick }: ContainerDetailProps) {
+export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec, onFiles, onImageClick }: ContainerDetailProps) {
   const config = (data?.configuration || {}) as Record<string, unknown>;
   const stateObj = (data?.status || {}) as Record<string, unknown>;
   const platform = (config.platform || {}) as Record<string, unknown>;
@@ -83,6 +84,9 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
           )}
           <button className="btn btn-info btn-sm" onClick={() => onLogs(id)}>Logs</button>
           <button className="btn btn-success btn-sm" onClick={() => onExec(id)}>Exec</button>
+          {state === "running" && (
+            <button className="btn btn-secondary btn-sm" onClick={() => onFiles(id)}>Files</button>
+          )}
           <button className="btn btn-danger btn-sm" onClick={() => onAction("delete", id)}>Delete</button>
         </div>
       </div>
