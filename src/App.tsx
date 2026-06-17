@@ -77,13 +77,6 @@ function App() {
   const [detailData, setDetailData] = useState<Record<string, unknown> | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<Container | null>(null);
-  const [dockerMode, setDockerMode] = useState(() => {
-    try {
-      return localStorage.getItem("docker-mode") === "true";
-    } catch {
-      return false;
-    }
-  });
 
   const handleSidebarToggle = useCallback(() => {
     setSidebarCollapsed(prev => {
@@ -133,6 +126,27 @@ function App() {
     const interval = setInterval(handleCheckSystemStatus, 10000);
     return () => clearInterval(interval);
   }, [handleCheckSystemStatus]);
+
+  // Cmd+, shortcut to open settings, Cmd+T to open terminal, Cmd+1-7 to switch tabs
+  useEffect(() => {
+    const tabs: Tab[] = ["containers", "images", "volumes", "networks", "machines", "terminal", "settings"];
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setActiveTab("settings");
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+        e.preventDefault();
+        setActiveTab("terminal");
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key >= "1" && e.key <= "7") {
+        e.preventDefault();
+        setActiveTab(tabs[parseInt(e.key) - 1]);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleLogs = async (id: string) => {
     setLogsContainerId(id);
@@ -432,7 +446,7 @@ function App() {
         )}
 
         {activeTab === "terminal" && (
-          <TerminalTab dockerMode={dockerMode} onDockerModeChange={setDockerMode} />
+          <TerminalTab />
         )}
 
         {activeTab === "settings" && <SettingsTab />}

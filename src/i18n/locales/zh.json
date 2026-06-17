@@ -1,0 +1,247 @@
+{
+  "app": {
+    "title": "Apple Container"
+  },
+  "sidebar": {
+    "containers": "容器",
+    "images": "镜像",
+    "volumes": "存储卷",
+    "networks": "网络",
+    "machines": "虚拟机",
+    "terminal": "终端",
+    "settings": "设置",
+    "service": "服务",
+    "start": "启动",
+    "stop": "停止"
+  },
+  "containers": {
+    "title": "容器",
+    "filterPlaceholder": "按 ID、镜像、命令、端口筛选...",
+    "allStates": "所有状态",
+    "running": "运行中",
+    "exited": "已退出",
+    "created": "已创建",
+    "run": "运行",
+    "pruneStopped": "清理已停止",
+    "refresh": "刷新",
+    "start": "启动",
+    "stop": "停止",
+    "delete": "删除",
+    "noContainers": "暂无容器",
+    "noMatch": "无匹配项",
+    "id": "ID",
+    "image": "镜像",
+    "command": "命令",
+    "state": "状态",
+    "ip": "IP",
+    "ports": "端口",
+    "resources": "资源",
+    "created_at": "创建时间",
+    "logs": "日志",
+    "inspect": "检查",
+    "execShell": "执行 Shell"
+  },
+  "images": {
+    "title": "镜像",
+    "filterPlaceholder": "按名称或标签筛选...",
+    "pull": "拉取",
+    "build": "构建",
+    "refresh": "刷新",
+    "pruneDangling": "清理悬空",
+    "noImages": "暂无镜像",
+    "noMatch": "无匹配项",
+    "repository": "仓库",
+    "tag": "标签",
+    "id": "ID",
+    "created": "创建时间",
+    "size": "大小",
+    "inspect": "检查",
+    "tagImage": "打标签",
+    "push": "推送",
+    "createContainer": "创建容器"
+  },
+  "volumes": {
+    "title": "存储卷",
+    "filterPlaceholder": "按名称筛选...",
+    "create": "创建",
+    "refresh": "刷新",
+    "pruneUnused": "清理未使用",
+    "noVolumes": "暂无存储卷",
+    "noMatch": "无匹配项",
+    "name": "名称",
+    "driver": "驱动",
+    "mountpoint": "挂载点",
+    "created": "创建时间",
+    "inspect": "检查"
+  },
+  "networks": {
+    "title": "网络",
+    "filterPlaceholder": "按名称筛选...",
+    "create": "创建",
+    "refresh": "刷新",
+    "pruneUnused": "清理未使用",
+    "noNetworks": "暂无网络",
+    "noMatch": "无匹配项",
+    "name": "名称",
+    "driver": "驱动",
+    "scope": "作用域",
+    "subnet": "子网",
+    "inspect": "检查"
+  },
+  "machines": {
+    "title": "虚拟机",
+    "filterPlaceholder": "按名称筛选...",
+    "create": "创建",
+    "refresh": "刷新",
+    "noMachines": "暂无虚拟机",
+    "noMatch": "无匹配项",
+    "name": "名称",
+    "image": "镜像",
+    "status": "状态",
+    "default": "默认",
+    "setDefault": "设为默认",
+    "start": "启动",
+    "stop": "停止",
+    "delete": "删除",
+    "inspect": "检查"
+  },
+  "terminal": {
+    "title": "终端"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "界面语言",
+    "languageDesc": "选择应用程序界面的语言",
+    "dockerCompatibility": "Docker 兼容性",
+    "enableDockerMode": "启用 Docker 模式",
+    "enableDockerModeDesc": "允许在终端中使用 docker 命令。命令将自动转换为 Apple Container。",
+    "dockerSocketPath": "Docker Socket 路径",
+    "dockerSocketPathDesc": "Docker 兼容套接字暴露的路径。由应用程序自动管理。",
+    "autoStartSocket": "自动启动 Socket 服务",
+    "autoStartSocketDesc": "应用启动时自动启动 Docker 兼容的 Socket 服务。",
+    "test": "测试",
+    "socketStatus": "Socket 状态",
+    "socketPath": "Socket 路径",
+    "connection": "连接",
+    "checking": "检查中...",
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "containers": "容器",
+    "images": "镜像",
+    "socktainer": "Socktainer (增强 Docker API)",
+    "useSocktainer": "使用 Socktainer",
+    "useSocktainerDesc": "使用 Socktainer 获得更完整的 Docker Engine API 实现，完全字段兼容。",
+    "useSocktainerOptional": "可选：增强的 Docker API 兼容性，完全字段支持。",
+    "startSocktainer": "启动 Socktainer",
+    "stopSocktainer": "停止 Socktainer",
+    "starting": "启动中...",
+    "stopping": "停止中...",
+    "notInstalled": "未安装",
+    "status": "状态",
+    "running": "运行中",
+    "stopped": "已停止",
+    "apiVersion": "API 版本",
+    "socktainerDesc1": "Socktainer 提供更完整的 Docker Engine API，完全字段兼容。",
+    "socktainerDesc2": "安装以启用增强的 Docker API 支持：",
+    "dockerCommandTranslation": "Docker 命令翻译",
+    "dockerCommand": "Docker 命令",
+    "appleContainerCommand": "Apple Container 命令",
+    "resetToDefaults": "恢复默认设置",
+    "resetConfirm": "重置所有 Docker 兼容性设置为默认值？"
+  },
+  "modal": {
+    "confirm": "确认",
+    "cancel": "取消",
+    "close": "关闭"
+  },
+  "confirm": {
+    "title": "确认",
+    "stopSystem": "停止容器系统服务？所有运行中的容器将受到影响。"
+  },
+  "toast": {
+    "systemStarted": "系统已启动",
+    "systemStopped": "系统已停止",
+    "containerStarted": "容器已启动",
+    "containerStopped": "容器已停止",
+    "containerDeleted": "容器已删除",
+    "imagePulled": "镜像已拉取",
+    "imageBuilt": "镜像已构建",
+    "imageTagged": "镜像已打标签",
+    "imagePushed": "镜像已推送",
+    "volumeCreated": "存储卷已创建",
+    "volumeDeleted": "存储卷已删除",
+    "networkCreated": "网络已创建",
+    "networkDeleted": "网络已删除",
+    "machineCreated": "虚拟机已创建",
+    "machineDeleted": "虚拟机已删除",
+    "defaultMachineSet": "默认虚拟机已设为 {{name}}",
+    "shellOpened": "Shell 已在终端中打开",
+    "failedToPull": "拉取镜像失败：{{error}}"
+  },
+  "runContainer": {
+    "title": "运行容器",
+    "image": "镜像",
+    "name": "名称",
+    "command": "命令",
+    "ports": "端口映射",
+    "volumes": "存储卷挂载",
+    "env": "环境变量",
+    "network": "网络",
+    "run": "运行"
+  },
+  "buildImage": {
+    "title": "构建镜像",
+    "dockerfile": "Dockerfile 路径",
+    "context": "构建上下文",
+    "tag": "镜像标签",
+    "build": "构建"
+  },
+  "pullImage": {
+    "title": "拉取镜像",
+    "reference": "镜像引用",
+    "pull": "拉取"
+  },
+  "tagImage": {
+    "title": "打标签",
+    "source": "源镜像",
+    "target": "目标名称",
+    "tag": "打标签"
+  },
+  "pushImage": {
+    "title": "推送镜像",
+    "reference": "镜像引用",
+    "push": "推送"
+  },
+  "createVolume": {
+    "title": "创建存储卷",
+    "name": "名称",
+    "size": "大小",
+    "create": "创建"
+  },
+  "createNetwork": {
+    "title": "创建网络",
+    "name": "名称",
+    "subnet": "子网 (可选)",
+    "create": "创建"
+  },
+  "createMachine": {
+    "title": "创建虚拟机",
+    "image": "基础镜像",
+    "name": "名称",
+    "cpus": "CPU 核数",
+    "memory": "内存 (MB)",
+    "homeMount": "主目录挂载",
+    "setDefault": "设为默认",
+    "create": "创建"
+  },
+  "logs": {
+    "title": "容器日志",
+    "refresh": "刷新"
+  },
+  "inspect": {
+    "title": "检查详情"
+  },
+  "taskPanel": {
+    "title": "任务面板"
+  }
+}

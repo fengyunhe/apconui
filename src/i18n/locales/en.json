@@ -1,0 +1,247 @@
+{
+  "app": {
+    "title": "Apple Container"
+  },
+  "sidebar": {
+    "containers": "Containers",
+    "images": "Images",
+    "volumes": "Volumes",
+    "networks": "Networks",
+    "machines": "Machines",
+    "terminal": "Terminal",
+    "settings": "Settings",
+    "service": "Service",
+    "start": "Start",
+    "stop": "Stop"
+  },
+  "containers": {
+    "title": "Containers",
+    "filterPlaceholder": "Filter by ID, image, command, port...",
+    "allStates": "All States",
+    "running": "Running",
+    "exited": "Exited",
+    "created": "Created",
+    "run": "Run",
+    "pruneStopped": "Prune Stopped",
+    "refresh": "Refresh",
+    "start": "Start",
+    "stop": "Stop",
+    "delete": "Delete",
+    "noContainers": "No containers",
+    "noMatch": "No match",
+    "id": "ID",
+    "image": "Image",
+    "command": "Command",
+    "state": "State",
+    "ip": "IP",
+    "ports": "Ports",
+    "resources": "Resources",
+    "created_at": "Created",
+    "logs": "Logs",
+    "inspect": "Inspect",
+    "execShell": "Exec Shell"
+  },
+  "images": {
+    "title": "Images",
+    "filterPlaceholder": "Filter by name or tag...",
+    "pull": "Pull",
+    "build": "Build",
+    "refresh": "Refresh",
+    "pruneDangling": "Prune Dangling",
+    "noImages": "No images",
+    "noMatch": "No match",
+    "repository": "Repository",
+    "tag": "Tag",
+    "id": "ID",
+    "created": "Created",
+    "size": "Size",
+    "inspect": "Inspect",
+    "tagImage": "Tag",
+    "push": "Push",
+    "createContainer": "Create Container"
+  },
+  "volumes": {
+    "title": "Volumes",
+    "filterPlaceholder": "Filter by name...",
+    "create": "Create",
+    "refresh": "Refresh",
+    "pruneUnused": "Prune Unused",
+    "noVolumes": "No volumes",
+    "noMatch": "No match",
+    "name": "Name",
+    "driver": "Driver",
+    "mountpoint": "Mountpoint",
+    "created": "Created",
+    "inspect": "Inspect"
+  },
+  "networks": {
+    "title": "Networks",
+    "filterPlaceholder": "Filter by name...",
+    "create": "Create",
+    "refresh": "Refresh",
+    "pruneUnused": "Prune Unused",
+    "noNetworks": "No networks",
+    "noMatch": "No match",
+    "name": "Name",
+    "driver": "Driver",
+    "scope": "Scope",
+    "subnet": "Subnet",
+    "inspect": "Inspect"
+  },
+  "machines": {
+    "title": "Machines",
+    "filterPlaceholder": "Filter by name...",
+    "create": "Create",
+    "refresh": "Refresh",
+    "noMachines": "No machines",
+    "noMatch": "No match",
+    "name": "Name",
+    "image": "Image",
+    "status": "Status",
+    "default": "Default",
+    "setDefault": "Set Default",
+    "start": "Start",
+    "stop": "Stop",
+    "delete": "Delete",
+    "inspect": "Inspect"
+  },
+  "terminal": {
+    "title": "Terminal"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Interface Language",
+    "languageDesc": "Select the language for the application interface.",
+    "dockerCompatibility": "Docker Compatibility",
+    "enableDockerMode": "Enable Docker Mode",
+    "enableDockerModeDesc": "Allow using docker commands in Terminal. Commands will be automatically translated to Apple Container.",
+    "dockerSocketPath": "Docker Socket Path",
+    "dockerSocketPathDesc": "Path where the Docker-compatible socket is exposed. This is auto-managed by the app.",
+    "autoStartSocket": "Auto-start Socket Server",
+    "autoStartSocketDesc": "Automatically start the Docker-compatible socket server when the app launches.",
+    "test": "Test",
+    "socketStatus": "Socket Status",
+    "socketPath": "Socket Path",
+    "connection": "Connection",
+    "checking": "Checking...",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "containers": "Containers",
+    "images": "Images",
+    "socktainer": "Socktainer (Enhanced Docker API)",
+    "useSocktainer": "Use Socktainer",
+    "useSocktainerDesc": "Use Socktainer for a more complete Docker Engine API implementation with full field compatibility.",
+    "useSocktainerOptional": "Optional: Enhanced Docker API compatibility with full field support.",
+    "startSocktainer": "Start Socktainer",
+    "stopSocktainer": "Stop Socktainer",
+    "starting": "Starting...",
+    "stopping": "Stopping...",
+    "notInstalled": "Not Installed",
+    "status": "Status",
+    "running": "Running",
+    "stopped": "Stopped",
+    "apiVersion": "API Version",
+    "socktainerDesc1": "Socktainer provides a more complete Docker Engine API with full field compatibility.",
+    "socktainerDesc2": "Install it to enable enhanced Docker API support:",
+    "dockerCommandTranslation": "Docker Command Translation",
+    "dockerCommand": "Docker Command",
+    "appleContainerCommand": "Apple Container Command",
+    "resetToDefaults": "Reset to Defaults",
+    "resetConfirm": "Reset all Docker compatibility settings to defaults?"
+  },
+  "modal": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
+  "confirm": {
+    "title": "Confirm",
+    "stopSystem": "Stop the container system service? All running containers will be affected."
+  },
+  "toast": {
+    "systemStarted": "System started",
+    "systemStopped": "System stopped",
+    "containerStarted": "Container started",
+    "containerStopped": "Container stopped",
+    "containerDeleted": "Container deleted",
+    "imagePulled": "Image pulled",
+    "imageBuilt": "Image built",
+    "imageTagged": "Image tagged",
+    "imagePushed": "Image pushed",
+    "volumeCreated": "Volume created",
+    "volumeDeleted": "Volume deleted",
+    "networkCreated": "Network created",
+    "networkDeleted": "Network deleted",
+    "machineCreated": "Machine created",
+    "machineDeleted": "Machine deleted",
+    "defaultMachineSet": "Default machine set to {{name}}",
+    "shellOpened": "Shell opened in Terminal",
+    "failedToPull": "Failed to pull image: {{error}}"
+  },
+  "runContainer": {
+    "title": "Run Container",
+    "image": "Image",
+    "name": "Name",
+    "command": "Command",
+    "ports": "Port Mapping",
+    "volumes": "Volume Mounts",
+    "env": "Environment Variables",
+    "network": "Network",
+    "run": "Run"
+  },
+  "buildImage": {
+    "title": "Build Image",
+    "dockerfile": "Dockerfile Path",
+    "context": "Build Context",
+    "tag": "Image Tag",
+    "build": "Build"
+  },
+  "pullImage": {
+    "title": "Pull Image",
+    "reference": "Image Reference",
+    "pull": "Pull"
+  },
+  "tagImage": {
+    "title": "Tag Image",
+    "source": "Source Image",
+    "target": "Target Name",
+    "tag": "Tag"
+  },
+  "pushImage": {
+    "title": "Push Image",
+    "reference": "Image Reference",
+    "push": "Push"
+  },
+  "createVolume": {
+    "title": "Create Volume",
+    "name": "Name",
+    "size": "Size",
+    "create": "Create"
+  },
+  "createNetwork": {
+    "title": "Create Network",
+    "name": "Name",
+    "subnet": "Subnet (optional)",
+    "create": "Create"
+  },
+  "createMachine": {
+    "title": "Create Machine",
+    "image": "Base Image",
+    "name": "Name",
+    "cpus": "CPU Cores",
+    "memory": "Memory (MB)",
+    "homeMount": "Home Mount",
+    "setDefault": "Set Default",
+    "create": "Create"
+  },
+  "logs": {
+    "title": "Container Logs",
+    "refresh": "Refresh"
+  },
+  "inspect": {
+    "title": "Inspect Details"
+  },
+  "taskPanel": {
+    "title": "Task Panel"
+  }
+}

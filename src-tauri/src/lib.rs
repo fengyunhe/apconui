@@ -1743,6 +1743,54 @@ fn get_socktainer_socket_path() -> String {
     SOCKTAINER_SOCKET.to_string()
 }
 
+#[tauri::command]
+fn open_terminal() -> CommandResult {
+    let docker_host = format!("unix://{}", SOCKTAINER_SOCKET);
+    
+    let script = format!(
+        "tell application \"Terminal\"\n\
+         activate\n\
+         do script \"export DOCKER_HOST='{}'\"\n\
+         end tell",
+        docker_host
+    );
+    
+    log_to_file(&format!("Opening terminal with DOCKER_HOST={}", docker_host));
+    
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .output()
+    {
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            log_to_file(&format!("osascript stderr: {}", stderr));
+            
+            if stderr.is_empty() {
+                CommandResult {
+                    success: true,
+                    stdout: "Terminal opened".to_string(),
+                    stderr: String::new(),
+                }
+            } else {
+                CommandResult {
+                    success: false,
+                    stdout: String::new(),
+                    stderr,
+                }
+            }
+        }
+        Err(e) => {
+            log_to_file(&format!("Failed to run osascript: {}", e));
+            CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to run osascript: {}", e),
+            }
+        }
+    }
+}
+
 // ==================== Raw Command Execution ====================
 
 fn format_docker_output(original_cmd: &str, result: &CommandResult) -> String {
@@ -2064,9 +2112,15 @@ async fn run_raw_command(command: String) -> CommandResult {
     }
 
     let is_docker = parts[0] == "docker";
+    let is_container = parts[0] == "container";
+
+    // Check if this is a streaming command (logs -f, stats, etc.)
+    let is_stream_cmd = parts.iter().any(|p| p == "-f" || p == "--follow") ||
+        (parts.iter().any(|p| p == "logs" || p == "stats") && !parts.iter().any(|p| p == "--no-stream"));
 
     // If docker command and Socktainer is running, query Socktainer directly via HTTP
-    if is_docker && is_socktainer_running() {
+    // Skip Socktainer for streaming commands as it doesn't support follow mode
+    if is_docker && is_socktainer_running() && !is_stream_cmd {
         let path = query_socktainer_path(&parts);
         if let Some(api_path) = path {
             let mut result = query_socktainer_api(&api_path).await;
@@ -2083,33 +2137,65 @@ async fn run_raw_command(command: String) -> CommandResult {
         };
     }
 
-    // Translate Docker commands to Apple Container commands
-    let translated = if parts[0] == "docker" {
-        translate_docker_command(&parts)
-    } else if parts[0] == "container" {
-        // Strip "container" prefix, pass rest directly
-        parts[1..].to_vec()
-    } else {
-        parts
-    };
-
-    if translated.is_empty() {
-        return CommandResult {
-            success: false,
-            stdout: String::new(),
-            stderr: "Empty command after translation".to_string(),
+    // For docker/container commands, use container CLI
+    if is_docker || is_container {
+        let translated = if is_docker {
+            translate_docker_command(&parts)
+        } else {
+            // Strip "container" prefix, pass rest directly
+            parts[1..].to_vec()
         };
+
+        if translated.is_empty() {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Empty command after translation".to_string(),
+            };
+        }
+
+        let mut result = run_container_cmd_async(translated).await;
+
+        // Format docker command output for better readability
+        if is_docker {
+            let formatted = format_docker_output(&command, &result);
+            result.stdout = formatted;
+        }
+
+        return result;
     }
 
-    let mut result = run_container_cmd_async(translated).await;
+    // For other commands, execute directly as system command
+    let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:/usr/sbin:/sbin";
+    tokio::task::spawn_blocking(move || {
+        let output = Command::new(&parts[0])
+            .args(&parts[1..])
+            .env("PATH", path)
+            .output();
 
-    // Format docker command output for better readability
-    if is_docker {
-        let formatted = format_docker_output(&command, &result);
-        result.stdout = formatted;
-    }
-
-    result
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                CommandResult {
+                    success: output.status.success(),
+                    stdout,
+                    stderr,
+                }
+            }
+            Err(e) => CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to execute command: {e}"),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
 }
 
 fn ensure_container_system_running() -> bool {
@@ -2215,6 +2301,7 @@ pub fn run() {
             run_container_cmd_stream,
             cancel_pull,
             open_url,
+            open_terminal,
             get_docker_socket_path,
             is_socktainer_installed,
             is_socktainer_running,
