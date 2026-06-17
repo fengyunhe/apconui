@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Container } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import type { Container, CommandResult } from "../types";
 
 interface ContainersTabProps {
   containers: Container[];
@@ -168,7 +169,11 @@ export function ContainersTab({ containers, loading, onRefresh, onRun, onStop, o
                             <a
                               href="#"
                               className="port-link"
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(`http://localhost:${hostPort}`); }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                invoke<CommandResult>("open_url", { url: `http://localhost:${hostPort}` });
+                              }}
                               title={`Open http://localhost:${hostPort}`}
                             >
                               {p.trim()}

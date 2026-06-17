@@ -1487,6 +1487,24 @@ fn translate_docker_command(parts: &[String]) -> Vec<String> {
     }
 }
 
+// ==================== Open URL ====================
+
+#[tauri::command]
+fn open_url(url: String) -> CommandResult {
+    match open::that(&url) {
+        Ok(_) => CommandResult {
+            success: true,
+            stdout: String::new(),
+            stderr: String::new(),
+        },
+        Err(e) => CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to open URL: {e}"),
+        },
+    }
+}
+
 // ==================== Docker Socket Path ====================
 
 #[tauri::command]
@@ -2060,6 +2078,7 @@ pub fn run() {
             run_machine_command,
             run_raw_command,
             cancel_pull,
+            open_url,
             get_docker_socket_path,
             is_socktainer_installed,
             is_socktainer_running,
