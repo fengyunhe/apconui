@@ -9,9 +9,10 @@ interface ContainerDetailProps {
   onAction: (action: string, id: string) => void;
   onLogs: (id: string) => void;
   onExec: (id: string) => void;
+  onImageClick?: (name: string) => void;
 }
 
-export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec }: ContainerDetailProps) {
+export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec, onImageClick }: ContainerDetailProps) {
   const config = (data?.configuration || {}) as Record<string, unknown>;
   const stateObj = (data?.status || {}) as Record<string, unknown>;
   const platform = (config.platform || {}) as Record<string, unknown>;
@@ -89,7 +90,13 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
       <div className="detail-body">
         <DetailSection title="General">
           <DetailRow label="ID" value={<span className="cell-id">{id}</span>} />
-          <DetailRow label="Image" value={imageRef || "-"} />
+          <DetailRow label="Image" value={
+            imageRef ? (
+              onImageClick ? (
+                <a href="#" className="detail-link" onClick={(e) => { e.preventDefault(); onImageClick(imageRef); }}>{imageRef}</a>
+              ) : imageRef
+            ) : "-"
+          } />
           <DetailRow label="Command" value={args.length > 0 ? <code>{args.join(" ")}</code> : (executable || "-")} />
           <DetailRow label="OS" value={os || "-"} />
           <DetailRow label="Architecture" value={arch || "-"} />

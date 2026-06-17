@@ -1,16 +1,19 @@
 import { formatBytes } from "../utils";
 import { DetailSection } from "./DetailSection";
 import { DetailRow } from "./DetailRow";
+import type { Container } from "../types";
 
 interface ImageDetailProps {
   data: Record<string, unknown> | null;
   loading: boolean;
+  containers?: Container[];
   onBack: () => void;
   onTag: (name: string) => void;
   onPush: (name: string) => void;
+  onContainerClick?: (id: string) => void;
 }
 
-export function ImageDetail({ data, loading, onBack, onTag, onPush }: ImageDetailProps) {
+export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, onContainerClick }: ImageDetailProps) {
   const id = (data?.id || "") as string;
   const imgData = (data?.configuration || {}) as Record<string, unknown>;
   const name = (imgData.name || "") as string;
@@ -32,6 +35,9 @@ export function ImageDetail({ data, loading, onBack, onTag, onPush }: ImageDetai
   const user = (imageConfig.User || "") as string;
   const exposedPorts = (imageConfig.ExposedPorts || {}) as Record<string, unknown>;
   const labels = (imageConfig.Labels || {}) as Record<string, string>;
+
+  // Find containers using this image
+  const usedByContainers = (containers || []).filter(c => c.image === name);
 
   if (loading) {
     return (
@@ -160,6 +166,26 @@ export function ImageDetail({ data, loading, onBack, onTag, onPush }: ImageDetai
                       {h.empty_layer ? " (empty layer)" : ""}
                     </span>
                   </div>
+                </div>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+
+        {usedByContainers.length > 0 && (
+          <DetailSection title={`Used by ${usedByContainers.length} Container(s)`}>
+            <div className="detail-containers-list">
+              {usedByContainers.map((c) => (
+                <div
+                  key={c.id}
+                  className={`detail-container-item ${onContainerClick ? "clickable" : ""}`}
+                  onClick={() => onContainerClick?.(c.id)}
+                >
+                  <div className="detail-container-info">
+                    <span className="detail-container-name">{c.id.substring(0, 12)}</span>
+                    <span className={`detail-container-state state-${c.state}`}>{c.state}</span>
+                  </div>
+                  {c.ip && <span className="detail-container-ip">{c.ip}</span>}
                 </div>
               ))}
             </div>

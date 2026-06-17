@@ -683,6 +683,19 @@ function App() {
           onAction={handleContainerAction}
           onLogs={(id) => { setLogsContainerId(id); setShowLogsModal(true); }}
           onExec={handleExec}
+          onImageClick={(imgName) => {
+            setLoading(true);
+            setDetailView("image");
+            invoke<CommandResult>("inspect_image", { name: imgName }).then((r) => {
+              if (r.success) {
+                try { setDetailData(JSON.parse(r.stdout)); } catch { setDetailData(null); }
+              } else {
+                showToast("error", r.stderr);
+                setDetailView(null);
+              }
+            }).catch((e) => { showToast("error", String(e)); setDetailView(null); })
+              .finally(() => setLoading(false));
+          }}
         />
       )}
 
@@ -690,9 +703,26 @@ function App() {
         <ImageDetail
           data={detailData}
           loading={detailLoading}
+          containers={containers}
           onBack={() => { setDetailView(null); setDetailData(null); }}
           onTag={(name) => { setTagImageSource(name); setShowTagModal(true); }}
           onPush={(name) => { setPushImageRef(name); setShowPushModal(true); }}
+          onContainerClick={(containerId) => {
+            setLoading(true);
+            setDetailView("container");
+            invoke<CommandResult>("inspect_container", { id: containerId }).then((r) => {
+              if (r.success) {
+                try {
+                  const parsed = JSON.parse(r.stdout);
+                  setDetailData(Array.isArray(parsed) ? parsed[0] : parsed);
+                } catch { setDetailData(null); }
+              } else {
+                showToast("error", r.stderr);
+                setDetailView(null);
+              }
+            }).catch((e) => { showToast("error", String(e)); setDetailView(null); })
+              .finally(() => setLoading(false));
+          }}
         />
       )}
 
