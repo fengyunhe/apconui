@@ -627,6 +627,16 @@ async fn list_images() -> CommandResult {
 }
 
 #[tauri::command]
+async fn image_exists_locally(reference: String) -> CommandResult {
+    let result = run_container_cmd_async(vec!["image".into(), "inspect".into(), reference]).await;
+    CommandResult {
+        success: result.success,
+        stdout: if result.success { "exists".to_string() } else { String::new() },
+        stderr: result.stderr,
+    }
+}
+
+#[tauri::command]
 async fn pull_image(reference: String, app: tauri::AppHandle) -> CommandResult {
     let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin";
     let ref_clone = reference.clone();
@@ -2015,6 +2025,7 @@ pub fn run() {
             copy_to_container,
             export_container,
             list_images,
+            image_exists_locally,
             pull_image,
             push_image,
             delete_image,

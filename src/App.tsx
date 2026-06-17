@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 
 // PERF: memoized counts
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import type { CommandResult, Container, Volume, Network, Tab } from "./types";
 import { useToast } from "./hooks/useToast";
 import { TOAST_ERROR, TOAST_SUCCESS } from "./utils";
@@ -38,6 +39,7 @@ import "./App.css";
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("");
   const [systemStatus, setSystemStatus] = useState<string>("unknown");
 
   const [showRunModal, setShowRunModal] = useState(false);
@@ -420,11 +422,38 @@ function App() {
           networks={networks}
           initialImage={runModalImage}
           loading={loading}
-          loadingMessage="Starting container... (may pull image if not local)"
+          loadingMessage={loadingMessage}
           onClose={() => { setShowRunModal(false); setRunModalImage(undefined); }}
           onRun={async (config) => {
+            const imageRef = config.image as string;
             setLoading(true);
+            setLoadingMessage("Checking image...");
+
             try {
+              // Check if image exists locally
+              const checkResult = await invoke<CommandResult>("image_exists_locally", { reference: imageRef });
+
+              if (!checkResult.success) {
+                // Image doesn't exist locally, pull it first
+                setLoadingMessage(`Pulling image: ${imageRef}...`);
+                showToast("success", `Pulling image: ${imageRef}`);
+
+                // Emit pull-start for TaskPanel
+                emit("pull-start", imageRef);
+
+                const pullResult = await invoke<CommandResult>("pull_image", { reference: imageRef });
+
+                if (!pullResult.success) {
+                  showToast("error", `Failed to pull image: ${pullResult.stderr}`);
+                  setLoading(false);
+                  return;
+                }
+
+                showToast("success", "Image pulled successfully");
+              }
+
+              // Now run the container
+              setLoadingMessage("Starting container...");
               const result = await invoke<CommandResult>("run_container", config);
               if (result.success) {
                 showToast("success", "Container started");
@@ -437,6 +466,7 @@ function App() {
               showToast("error", String(e));
             } finally {
               setLoading(false);
+              setLoadingMessage("");
             }
           }}
         />
