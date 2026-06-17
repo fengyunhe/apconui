@@ -39,7 +39,6 @@ import "./App.css";
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState("");
   const [systemStatus, setSystemStatus] = useState<string>("unknown");
 
   const [showRunModal, setShowRunModal] = useState(false);
@@ -421,15 +420,11 @@ function App() {
           images={images}
           networks={networks}
           initialImage={runModalImage}
-          loading={loading}
-          loadingMessage={loadingMessage}
           onClose={() => { setShowRunModal(false); setRunModalImage(undefined); }}
           onRun={async (config) => {
             const imageRef = config.image as string;
             setShowRunModal(false);
             setRunModalImage(undefined);
-            setLoading(true);
-            setLoadingMessage("Checking image...");
 
             try {
               // Check if image exists locally
@@ -437,22 +432,16 @@ function App() {
 
               if (!checkResult.success) {
                 // Image doesn't exist locally, pull it first
-                setLoadingMessage(`Pulling image: ${imageRef}...`);
-
-                // Emit pull-start for TaskPanel
                 emit("pull-start", imageRef);
-
                 const pullResult = await invoke<CommandResult>("pull_image", { reference: imageRef });
 
                 if (!pullResult.success) {
                   showToast("error", `Failed to pull image: ${pullResult.stderr}`);
-                  setLoading(false);
                   return;
                 }
               }
 
               // Now run the container
-              setLoadingMessage("Starting container...");
               const result = await invoke<CommandResult>("run_container", config);
               if (result.success) {
                 showToast("success", "Container started");
@@ -462,9 +451,6 @@ function App() {
               }
             } catch (e) {
               showToast("error", String(e));
-            } finally {
-              setLoading(false);
-              setLoadingMessage("");
             }
           }}
         />
