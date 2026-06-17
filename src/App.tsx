@@ -426,6 +426,8 @@ function App() {
           onClose={() => { setShowRunModal(false); setRunModalImage(undefined); }}
           onRun={async (config) => {
             const imageRef = config.image as string;
+            setShowRunModal(false);
+            setRunModalImage(undefined);
             setLoading(true);
             setLoadingMessage("Checking image...");
 
@@ -436,7 +438,6 @@ function App() {
               if (!checkResult.success) {
                 // Image doesn't exist locally, pull it first
                 setLoadingMessage(`Pulling image: ${imageRef}...`);
-                showToast("success", `Pulling image: ${imageRef}`);
 
                 // Emit pull-start for TaskPanel
                 emit("pull-start", imageRef);
@@ -448,8 +449,6 @@ function App() {
                   setLoading(false);
                   return;
                 }
-
-                showToast("success", "Image pulled successfully");
               }
 
               // Now run the container
@@ -457,7 +456,6 @@ function App() {
               const result = await invoke<CommandResult>("run_container", config);
               if (result.success) {
                 showToast("success", "Container started");
-                setShowRunModal(false);
                 refreshContainers();
               } else {
                 showToast("error", result.stderr);
