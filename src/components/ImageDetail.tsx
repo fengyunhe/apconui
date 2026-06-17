@@ -1,6 +1,7 @@
 import { formatBytes } from "../utils";
 import { DetailSection } from "./DetailSection";
 import { DetailRow } from "./DetailRow";
+import { useTranslation } from 'react-i18next';
 import type { Container } from "../types";
 
 interface ImageDetailProps {
@@ -14,6 +15,7 @@ interface ImageDetailProps {
 }
 
 export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, onContainerClick }: ImageDetailProps) {
+  const { t } = useTranslation();
   const id = (data?.id || "") as string;
   const imgData = (data?.configuration || {}) as Record<string, unknown>;
   const name = (imgData.name || "") as string;
@@ -43,10 +45,10 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
     return (
       <div className="detail-page">
         <div className="detail-header">
-          <button className="btn btn-secondary" onClick={onBack}>Back</button>
-          <h2>Loading...</h2>
+          <button className="btn btn-secondary" onClick={onBack}>{t('detail.back')}</button>
+          <h2>{t('detail.loading')}</h2>
         </div>
-        <div className="detail-loading">Loading image details...</div>
+        <div className="detail-loading">{t('detail.loading')}</div>
       </div>
     );
   }
@@ -55,10 +57,10 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
     return (
       <div className="detail-page">
         <div className="detail-header">
-          <button className="btn btn-secondary" onClick={onBack}>Back</button>
-          <h2>Image Details</h2>
+          <button className="btn btn-secondary" onClick={onBack}>{t('detail.back')}</button>
+          <h2>{t('detail.general')}</h2>
         </div>
-        <div className="detail-loading">No data available</div>
+        <div className="detail-loading">{t('detail.noData')}</div>
       </div>
     );
   }
@@ -68,39 +70,39 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
       <div className="detail-header">
         <button className="btn btn-secondary" onClick={onBack}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-          Back
+          {t('detail.back')}
         </button>
         <div className="detail-title-area">
-          <h2>Image</h2>
+          <h2>{t('images.title')}</h2>
           <span className="tag-badge">{name}</span>
         </div>
         <div className="detail-actions">
-          <button className="btn btn-info btn-sm" onClick={() => onTag(name)}>Tag</button>
-          <button className="btn btn-success btn-sm" onClick={() => onPush(name)}>Push</button>
+          <button className="btn btn-info btn-sm" onClick={() => onTag(name)}>{t('detail.tag')}</button>
+          <button className="btn btn-success btn-sm" onClick={() => onPush(name)}>{t('detail.push')}</button>
         </div>
       </div>
 
       <div className="detail-body">
-        <DetailSection title="General">
-          <DetailRow label="ID" value={<span className="cell-digest">{id}</span>} />
-          <DetailRow label="Name" value={name || "-"} />
-          <DetailRow label="Created" value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
-          <DetailRow label="Size" value={size ? formatBytes(size) : "-"} />
-          <DetailRow label="Media Type" value={mediatype || "-"} />
+        <DetailSection title={t('detail.general')}>
+          <DetailRow label={t('detail.id')} value={<span className="cell-digest">{id}</span>} />
+          <DetailRow label={t('detail.name')} value={name || "-"} />
+          <DetailRow label={t('detail.created')} value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
+          <DetailRow label={t('detail.size')} value={size ? formatBytes(size) : "-"} />
+          <DetailRow label={t('detail.mediaType')} value={mediatype || "-"} />
         </DetailSection>
 
-        <DetailSection title="Configuration">
-          <DetailRow label="Entrypoint" value={entrypoint.length > 0 ? <code>{entrypoint.join(" ")}</code> : "-"} />
-          <DetailRow label="Cmd" value={cmd.length > 0 ? <code>{cmd.join(" ")}</code> : "-"} />
-          <DetailRow label="Working Dir" value={workingDir || "-"} />
-          <DetailRow label="User" value={user || "-"} />
+        <DetailSection title={t('detail.configuration')}>
+          <DetailRow label={t('detail.entrypoint')} value={entrypoint.length > 0 ? <code>{entrypoint.join(" ")}</code> : "-"} />
+          <DetailRow label={t('detail.cmd')} value={cmd.length > 0 ? <code>{cmd.join(" ")}</code> : "-"} />
+          <DetailRow label={t('detail.workingDir')} value={workingDir || "-"} />
+          <DetailRow label={t('detail.user')} value={user || "-"} />
           {Object.keys(exposedPorts).length > 0 && (
-            <DetailRow label="Exposed Ports" value={Object.keys(exposedPorts).join(", ")} />
+            <DetailRow label={t('detail.exposedPorts')} value={Object.keys(exposedPorts).join(", ")} />
           )}
         </DetailSection>
 
         {env.length > 0 && (
-          <DetailSection title="Environment">
+          <DetailSection title={t('detail.environment')}>
             <div className="detail-env-list">
               {env.map((e, i) => (
                 <code key={i} className="detail-env-item">{e}</code>
@@ -110,7 +112,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
         )}
 
         {Object.keys(labels).length > 0 && (
-          <DetailSection title="Labels">
+          <DetailSection title={t('detail.labels')}>
             {Object.entries(labels).map(([k, v]) => (
               <DetailRow key={k} label={k} value={v} />
             ))}
@@ -118,7 +120,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
         )}
 
         {variants.length > 0 && (
-          <DetailSection title={`Variants (${variants.length})`}>
+          <DetailSection title={`${t('detail.variants')} (${variants.length})`}>
             <div className="detail-layers">
               {variants.map((v, i) => {
                 const platform = (v.platform || {}) as Record<string, unknown>;
@@ -139,7 +141,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
         )}
 
         {diffIDs.length > 0 && (
-          <DetailSection title={`Layers (${diffIDs.length})`}>
+          <DetailSection title={`${t('detail.layers')} (${diffIDs.length})`}>
             <div className="detail-layers">
               {diffIDs.map((d, i) => (
                 <div key={i} className="detail-layer">
@@ -152,7 +154,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
         )}
 
         {history.length > 0 && (
-          <DetailSection title="Build History">
+          <DetailSection title={t('detail.buildHistory')}>
             <div className="detail-history">
               {history.map((h, i) => (
                 <div key={i} className="detail-history-item">
@@ -163,7 +165,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
                     )}
                     <span className="detail-history-meta">
                       {h.size ? `${formatBytes(Number(h.size))}` : ""}
-                      {h.empty_layer ? " (empty layer)" : ""}
+                      {h.empty_layer ? ` (${t('detail.emptyLayer')})` : ""}
                     </span>
                   </div>
                 </div>
@@ -173,7 +175,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
         )}
 
         {usedByContainers.length > 0 && (
-          <DetailSection title={`Used by ${usedByContainers.length} Container(s)`}>
+          <DetailSection title={t('detail.usedBy', { count: usedByContainers.length })}>
             <div className="detail-containers-list">
               {usedByContainers.map((c) => (
                 <div
@@ -192,7 +194,7 @@ export function ImageDetail({ data, loading, containers, onBack, onTag, onPush, 
           </DetailSection>
         )}
 
-        <DetailSection title="Raw JSON">
+        <DetailSection title={t('detail.rawJson')}>
           <div className="inspect-content">
             <pre>{JSON.stringify(data, null, 2)}</pre>
           </div>

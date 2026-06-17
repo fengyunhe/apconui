@@ -1,6 +1,7 @@
 import { formatBytes } from "../utils";
 import { DetailSection } from "./DetailSection";
 import { DetailRow } from "./DetailRow";
+import { useTranslation } from 'react-i18next';
 
 interface ContainerDetailProps {
   data: Record<string, unknown> | null;
@@ -14,6 +15,7 @@ interface ContainerDetailProps {
 }
 
 export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExec, onFiles, onImageClick }: ContainerDetailProps) {
+  const { t } = useTranslation();
   const config = (data?.configuration || {}) as Record<string, unknown>;
   const stateObj = (data?.status || {}) as Record<string, unknown>;
   const platform = (config.platform || {}) as Record<string, unknown>;
@@ -42,10 +44,10 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
     return (
       <div className="detail-page">
         <div className="detail-header">
-          <button className="btn btn-secondary" onClick={onBack}>Back</button>
-          <h2>Loading...</h2>
+          <button className="btn btn-secondary" onClick={onBack}>{t('detail.back')}</button>
+          <h2>{t('detail.loading')}</h2>
         </div>
-        <div className="detail-loading">Loading container details...</div>
+        <div className="detail-loading">{t('detail.loading')}</div>
       </div>
     );
   }
@@ -54,10 +56,10 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
     return (
       <div className="detail-page">
         <div className="detail-header">
-          <button className="btn btn-secondary" onClick={onBack}>Back</button>
-          <h2>Container Details</h2>
+          <button className="btn btn-secondary" onClick={onBack}>{t('detail.back')}</button>
+          <h2>{t('detail.general')}</h2>
         </div>
-        <div className="detail-loading">No data available</div>
+        <div className="detail-loading">{t('detail.noData')}</div>
       </div>
     );
   }
@@ -67,66 +69,66 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
       <div className="detail-header">
         <button className="btn btn-secondary" onClick={onBack}>
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
-          Back
+          {t('detail.back')}
         </button>
         <div className="detail-title-area">
-          <h2>Container</h2>
+          <h2>{t('containers.title')}</h2>
           <span className={`status-badge status-${state}`}>{state}</span>
         </div>
         <div className="detail-actions">
           {state === "running" ? (
             <>
-              <button className="btn btn-warning btn-sm" onClick={() => onAction("stop", id)}>Stop</button>
-              <button className="btn btn-danger btn-sm" onClick={() => onAction("kill", id)}>Kill</button>
+              <button className="btn btn-warning btn-sm" onClick={() => onAction("stop", id)}>{t('detail.stop')}</button>
+              <button className="btn btn-danger btn-sm" onClick={() => onAction("kill", id)}>{t('detail.kill')}</button>
             </>
           ) : (
-            <button className="btn btn-success btn-sm" onClick={() => onAction("start", id)}>Start</button>
+            <button className="btn btn-success btn-sm" onClick={() => onAction("start", id)}>{t('detail.start')}</button>
           )}
-          <button className="btn btn-info btn-sm" onClick={() => onLogs(id)}>Logs</button>
-          <button className="btn btn-success btn-sm" onClick={() => onExec(id)}>Exec</button>
+          <button className="btn btn-info btn-sm" onClick={() => onLogs(id)}>{t('detail.logs')}</button>
+          <button className="btn btn-success btn-sm" onClick={() => onExec(id)}>{t('detail.exec')}</button>
           {state === "running" && (
-            <button className="btn btn-secondary btn-sm" onClick={() => onFiles(id)}>Files</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => onFiles(id)}>{t('detail.files')}</button>
           )}
-          <button className="btn btn-danger btn-sm" onClick={() => onAction("delete", id)}>Delete</button>
+          <button className="btn btn-danger btn-sm" onClick={() => onAction("delete", id)}>{t('detail.delete')}</button>
         </div>
       </div>
 
       <div className="detail-body">
-        <DetailSection title="General">
-          <DetailRow label="ID" value={<span className="cell-id">{id}</span>} />
-          <DetailRow label="Image" value={
+        <DetailSection title={t('detail.general')}>
+          <DetailRow label={t('detail.id')} value={<span className="cell-id">{id}</span>} />
+          <DetailRow label={t('detail.image')} value={
             imageRef ? (
               onImageClick ? (
                 <a href="#" className="detail-link" onClick={(e) => { e.preventDefault(); onImageClick(imageRef); }}>{imageRef}</a>
               ) : imageRef
             ) : "-"
           } />
-          <DetailRow label="Command" value={args.length > 0 ? <code>{args.join(" ")}</code> : (executable || "-")} />
-          <DetailRow label="OS" value={os || "-"} />
-          <DetailRow label="Architecture" value={arch || "-"} />
-          <DetailRow label="Stop Signal" value={stopSignal || "-"} />
-          <DetailRow label="Created" value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
-          <DetailRow label="Started" value={startedAt ? new Date(startedAt).toLocaleString() : "-"} />
+          <DetailRow label={t('detail.command')} value={args.length > 0 ? <code>{args.join(" ")}</code> : (executable || "-")} />
+          <DetailRow label={t('detail.os')} value={os || "-"} />
+          <DetailRow label={t('detail.architecture')} value={arch || "-"} />
+          <DetailRow label={t('detail.stopSignal')} value={stopSignal || "-"} />
+          <DetailRow label={t('detail.created')} value={creationDate ? new Date(creationDate).toLocaleString() : "-"} />
+          <DetailRow label={t('detail.started')} value={startedAt ? new Date(startedAt).toLocaleString() : "-"} />
         </DetailSection>
 
-        <DetailSection title="Resources">
-          <DetailRow label="CPUs" value={cpus > 0 ? String(cpus) : "-"} />
-          <DetailRow label="Memory Limit" value={memBytes > 0 ? formatBytes(memBytes) : "-"} />
+        <DetailSection title={t('detail.resources')}>
+          <DetailRow label={t('detail.cpus')} value={cpus > 0 ? String(cpus) : "-"} />
+          <DetailRow label={t('detail.memoryLimit')} value={memBytes > 0 ? formatBytes(memBytes) : "-"} />
         </DetailSection>
 
         {publishedPorts.length > 0 && (
-          <DetailSection title="Published Ports">
+          <DetailSection title={t('detail.publishedPorts')}>
             {publishedPorts.map((p, i) => (
               <div key={i} className="detail-network-card">
-                <DetailRow label="Host" value={`${(p.hostAddress || "0.0.0.0") as string}:${(p.hostPort || "") as number}`} />
-                <DetailRow label="Container" value={`${(p.containerPort || "") as number}/${(p.proto || "tcp") as string}`} />
+                <DetailRow label={t('detail.host')} value={`${(p.hostAddress || "0.0.0.0") as string}:${(p.hostPort || "") as number}`} />
+                <DetailRow label={t('detail.container')} value={`${(p.containerPort || "") as number}/${(p.proto || "tcp") as string}`} />
               </div>
             ))}
           </DetailSection>
         )}
 
         {Object.keys(labels).length > 0 && (
-          <DetailSection title="Labels">
+          <DetailSection title={t('detail.labels')}>
             {Object.entries(labels).map(([k, v]) => (
               <DetailRow key={k} label={k} value={v} />
             ))}
@@ -134,7 +136,7 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
         )}
 
         {env.length > 0 && (
-          <DetailSection title="Environment">
+          <DetailSection title={t('detail.environment')}>
             <div className="detail-env-list">
               {env.map((e, i) => (
                 <code key={i} className="detail-env-item">{e}</code>
@@ -144,28 +146,28 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
         )}
 
         {networks.length > 0 && (
-          <DetailSection title="Networks">
+          <DetailSection title={t('detail.networks')}>
             {networks.map((n, i) => (
               <div key={i} className="detail-network-card">
-                <DetailRow label="Network" value={(n.network || "") as string} />
-                <DetailRow label="IPv4" value={(n.ipv4Address || "") as string} />
-                <DetailRow label="IPv6" value={(n.ipv6Address || "") as string} />
-                <DetailRow label="Gateway" value={(n.ipv4Gateway || "") as string} />
-                <DetailRow label="MAC" value={(n.macAddress || "") as string} />
+                <DetailRow label={t('detail.network')} value={(n.network || "") as string} />
+                <DetailRow label={t('detail.ipv4')} value={(n.ipv4Address || "") as string} />
+                <DetailRow label={t('detail.ipv6')} value={(n.ipv6Address || "") as string} />
+                <DetailRow label={t('detail.gateway')} value={(n.ipv4Gateway || "") as string} />
+                <DetailRow label={t('detail.mac')} value={(n.macAddress || "") as string} />
               </div>
             ))}
           </DetailSection>
         )}
 
         {mounts.length > 0 && (
-          <DetailSection title="Mounts">
+          <DetailSection title={t('detail.mounts')}>
             {mounts.map((m, i) => (
               <div key={i} className="detail-mount-card">
-                <DetailRow label="Type" value={(m.type || "") as string} />
-                <DetailRow label="Source" value={<span className="cell-digest">{(m.source || "") as string}</span>} />
-                <DetailRow label="Destination" value={(m.destination || "") as string} />
-                <DetailRow label="Mode" value={(m.mode || "") as string} />
-                <DetailRow label="RW" value={(m.rw !== undefined) ? (m.rw ? "Yes" : "No") : "-"} />
+                <DetailRow label={t('detail.type')} value={(m.type || "") as string} />
+                <DetailRow label={t('detail.source')} value={<span className="cell-digest">{(m.source || "") as string}</span>} />
+                <DetailRow label={t('detail.destination')} value={(m.destination || "") as string} />
+                <DetailRow label={t('detail.mode')} value={(m.mode || "") as string} />
+                <DetailRow label={t('detail.rw')} value={(m.rw !== undefined) ? (m.rw ? t('detail.yes') : t('detail.no')) : "-"} />
               </div>
             ))}
           </DetailSection>
@@ -179,16 +181,16 @@ export function ContainerDetail({ data, loading, onBack, onAction, onLogs, onExe
           const domain = (dns.domain || "") as string;
           if (servers.length === 0 && search.length === 0 && options.length === 0 && !domain) return null;
           return (
-            <DetailSection title="DNS">
-              <DetailRow label="Servers" value={servers.join(", ") || "-"} />
-              <DetailRow label="Search" value={search.join(", ") || "-"} />
-              <DetailRow label="Options" value={options.join(", ") || "-"} />
-              <DetailRow label="Domain" value={domain || "-"} />
+            <DetailSection title={t('detail.dns')}>
+              <DetailRow label={t('detail.servers')} value={servers.join(", ") || "-"} />
+              <DetailRow label={t('detail.search')} value={search.join(", ") || "-"} />
+              <DetailRow label={t('detail.options')} value={options.join(", ") || "-"} />
+              <DetailRow label={t('detail.domain')} value={domain || "-"} />
             </DetailSection>
           );
         })()}
 
-        <DetailSection title="Raw JSON">
+        <DetailSection title={t('detail.rawJson')}>
           <div className="inspect-content">
             <pre>{JSON.stringify(data, null, 2)}</pre>
           </div>
