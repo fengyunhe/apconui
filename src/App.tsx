@@ -40,6 +40,13 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
   const [systemStatus, setSystemStatus] = useState<string>("unknown");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const [showRunModal, setShowRunModal] = useState(false);
   const [runModalImage, setRunModalImage] = useState<string | undefined>(undefined);
@@ -75,6 +82,18 @@ function App() {
       return false;
     }
   });
+
+  const handleSidebarToggle = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebar-collapsed", String(next));
+      } catch (e) {
+        console.error("Failed to save sidebar state:", e);
+      }
+      return next;
+    });
+  }, []);
 
   const { toastMessage, showToast } = useToast();
   const { confirmDialog, confirm, cancelConfirm } = useConfirm();
@@ -301,6 +320,8 @@ function App() {
         onSystemStart={handleSystemStart}
         onSystemStop={handleSystemStop}
         loading={loading}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={handleSidebarToggle}
       />
 
       <main className="main-content">
