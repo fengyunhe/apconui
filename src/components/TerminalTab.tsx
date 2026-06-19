@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from 'react-i18next';
 import type { CommandResult } from "../types";
@@ -8,20 +8,21 @@ export function TerminalTab() {
   const [socketStatus, setSocketStatus] = useState<"checking" | "connected" | "disconnected">("checking");
   const [opening, setOpening] = useState(false);
 
-  useEffect(() => {
-    checkSocketStatus();
-    const interval = setInterval(checkSocketStatus, 10000);
-    return () => clearInterval(interval);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
-
-  const checkSocketStatus = async () => {
+  const checkSocketStatus = useCallback(async () => {
     try {
       const result = await invoke<CommandResult>("run_raw_command", { command: "system status" });
       setSocketStatus(result.success && result.stdout.toLowerCase().includes("running") ? "connected" : "disconnected");
     } catch {
       setSocketStatus("disconnected");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    checkSocketStatus();
+    const interval = setInterval(checkSocketStatus, 10000);
+    return () => clearInterval(interval);
+  }, [checkSocketStatus]);
 
   const handleOpenTerminal = async () => {
     setOpening(true);

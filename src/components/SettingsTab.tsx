@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from 'react-i18next';
 import { changeLanguage } from '../i18n';
@@ -34,7 +34,7 @@ export function SettingsTab() {
   const [socktainerLoading, setSocktainerLoading] = useState<boolean>(false);
 
   // Check socktainer status
-  const checkSocktainerStatus = async () => {
+  const checkSocktainerStatus = useCallback(async () => {
     try {
       const installed = await invoke<boolean>("is_socktainer_installed");
       setSocktainerInstalled(installed);
@@ -44,8 +44,10 @@ export function SettingsTab() {
       if (running && !settings.useSocktainer) {
         setSettings((prev) => ({ ...prev, useSocktainer: true }));
       }
-    } catch {}
-  };
+    } catch {
+      console.error("Failed to check socktainer status");
+    }
+  }, [settings.useSocktainer]);
 
   // Get actual socket path from backend
   useEffect(() => {
@@ -69,19 +71,15 @@ export function SettingsTab() {
     loadSocketPath();
   }, [settings.useSocktainer]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     checkSocktainerStatus();
     const interval = setInterval(checkSocktainerStatus, 5000);
     return () => clearInterval(interval);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
+  }, [checkSocktainerStatus]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  useEffect(() => {
-    checkSocketStatus();
-    const interval = setInterval(checkSocketStatus, 5000);
-    return () => clearInterval(interval);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
-
-  const checkSocketStatus = async () => {
+  const checkSocketStatus = useCallback(async () => {
     try {
       const result = await invoke<CommandResult>("run_raw_command", {
         command: `system status`
@@ -104,14 +102,23 @@ export function SettingsTab() {
               images: Array.isArray(images) ? images.length : 0,
             });
           }
-        } catch {}
+        } catch {
+          console.error("Failed to get container/image stats");
+        }
       } else {
         setSocketStatus("disconnected");
       }
     } catch {
       setSocketStatus("disconnected");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    checkSocketStatus();
+    const interval = setInterval(checkSocketStatus, 5000);
+    return () => clearInterval(interval);
+  }, [checkSocketStatus]);
 
   const handleTestSocket = async () => {
     try {
