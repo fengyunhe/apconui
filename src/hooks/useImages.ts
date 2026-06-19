@@ -1,10 +1,10 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, Image, RawImage } from "../types";
-import { parseJsonArray, mapImages } from "../utils";
+import type { CommandResult, Image, RawImage, ToastType } from "../types";
+import { parseJsonArray, mapImages, TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface UseImagesParams {
-  showToast: (type: "success" | "error", text: string) => void;
+  showToast: (type: ToastType, text: string) => void;
   confirm: (message: string) => Promise<boolean>;
   setLoading: (v: boolean) => void;
 }
@@ -38,13 +38,13 @@ export function useImages({ showToast, confirm, setLoading }: UseImagesParams) {
           return;
       }
       if (result.success) {
-        showToast("success", `Image ${action} succeeded`);
+        showToast(TOAST_SUCCESS, `Image ${action} succeeded`);
         refreshImages();
       } else {
-        showToast("error", result.stderr || `Failed to ${action} image`);
+        showToast(TOAST_ERROR, result.stderr || `Failed to ${action} image`);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -56,13 +56,13 @@ export function useImages({ showToast, confirm, setLoading }: UseImagesParams) {
     try {
       const result = await invoke<CommandResult>("prune_images", { all: true });
       if (result.success) {
-        showToast("success", "Images pruned");
+        showToast(TOAST_SUCCESS, "Images pruned");
         refreshImages();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }

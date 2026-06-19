@@ -111,6 +111,7 @@ export function SettingsTab() {
     } catch {
       setSocketStatus("disconnected");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

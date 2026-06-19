@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, Container, ContainerStats, RawContainer } from "../types";
-import { parseJsonArray, mapContainers } from "../utils";
+import type { CommandResult, Container, ContainerStats, RawContainer, ToastType } from "../types";
+import { parseJsonArray, mapContainers, TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface UseContainersParams {
-  showToast: (type: "success" | "error", text: string) => void;
+  showToast: (type: ToastType, text: string) => void;
   confirm: (message: string) => Promise<boolean>;
   setLoading: (v: boolean) => void;
 }
@@ -106,13 +106,13 @@ export function useContainers({ showToast, confirm, setLoading }: UseContainersP
           return;
       }
       if (result.success) {
-        showToast("success", `Container ${action} succeeded`);
+        showToast(TOAST_SUCCESS, `Container ${action} succeeded`);
         refreshContainers();
       } else {
-        showToast("error", result.stderr || `Failed to ${action} container`);
+        showToast(TOAST_ERROR, result.stderr || `Failed to ${action} container`);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -124,13 +124,13 @@ export function useContainers({ showToast, confirm, setLoading }: UseContainersP
     try {
       const result = await invoke<CommandResult>("prune_containers");
       if (result.success) {
-        showToast("success", "Containers pruned");
+        showToast(TOAST_SUCCESS, "Containers pruned");
         refreshContainers();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }

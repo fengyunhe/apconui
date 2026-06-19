@@ -123,7 +123,8 @@ function App() {
     } catch {
       setSystemStatus("unknown");
     }
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -151,7 +152,8 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLogs = async (id: string) => {
     setLogsContainerId(id);
@@ -175,7 +177,7 @@ function App() {
         showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -187,10 +189,10 @@ function App() {
       if (result.success) {
         showToast(TOAST_SUCCESS, "Shell opened in Terminal");
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     }
   };
 
@@ -213,11 +215,11 @@ function App() {
           setDetailData(null);
         }
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
         setDetailView(null);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
       setDetailView(null);
     } finally {
       setDetailLoading(false);
@@ -237,11 +239,11 @@ function App() {
           setDetailData(null);
         }
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
         setDetailView(null);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
       setDetailView(null);
     } finally {
       setDetailLoading(false);
@@ -261,10 +263,10 @@ function App() {
         setSelectedVolume(volumes.find(v => v.name === name) || null);
         setShowVolumeInspectModal(true);
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -283,10 +285,10 @@ function App() {
         setSelectedNetwork(networks.find(n => n.name === name) || null);
         setShowNetworkInspectModal(true);
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -297,13 +299,13 @@ function App() {
     try {
       const result = await invoke<CommandResult>("system_start");
       if (result.success) {
-        showToast("success", t('toast.systemStarted'));
+        showToast(TOAST_SUCCESS, t('toast.systemStarted'));
         handleCheckSystemStatus();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -315,13 +317,13 @@ function App() {
     try {
       const result = await invoke<CommandResult>("system_stop");
       if (result.success) {
-        showToast("success", t('toast.systemStopped'));
+        showToast(TOAST_SUCCESS, t('toast.systemStopped'));
         handleCheckSystemStatus();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -386,10 +388,10 @@ function App() {
                   try { setInspectData(JSON.stringify(JSON.parse(r.stdout), null, 2)); } catch { setInspectData(r.stdout); }
                   setShowInspectModal(true);
                 } else {
-                  showToast("error", r.stderr);
+                  showToast(TOAST_ERROR, r.stderr);
                 }
               } catch (e) {
-                showToast("error", String(e));
+                showToast(TOAST_ERROR, String(e));
               } finally {
                 setLoading(false);
               }
@@ -442,13 +444,13 @@ function App() {
               try {
                 const result = await invoke<CommandResult>("set_default_machine", { name });
                 if (result.success) {
-                  showToast("success", `Default machine set to ${name}`);
+                  showToast(TOAST_SUCCESS, `Default machine set to ${name}`);
                   refreshMachines();
                 } else {
-                  showToast("error", result.stderr);
+                  showToast(TOAST_ERROR, result.stderr);
                 }
               } catch (e) {
-                showToast("error", String(e));
+                showToast(TOAST_ERROR, String(e));
               } finally {
                 setLoading(false);
               }
@@ -487,7 +489,7 @@ function App() {
                 // removed debug: console.log(`[Run] Pull ${imageRef} result:`, pullResult.success, pullResult.stderr);
 
                 if (!pullResult.success) {
-                  showToast("error", `Failed to pull image: ${pullResult.stderr}`);
+                  showToast(TOAST_ERROR, `Failed to pull image: ${pullResult.stderr}`);
                   return;
                 }
               }
@@ -497,14 +499,14 @@ function App() {
               const result = await invoke<CommandResult>("run_container", config);
               // removed debug: console.log(`[Run] Container start result:`, result.success, result.stderr);
               if (result.success) {
-                showToast("success", "Container started");
+                showToast(TOAST_SUCCESS, "Container started");
                 refreshContainers();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
               console.error(`[Run] Error:`, e);
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             }
           }}
         />
@@ -518,14 +520,14 @@ function App() {
             try {
               const result = await invoke<CommandResult>("build_image", config);
               if (result.success) {
-                showToast("success", "Image built");
+                showToast(TOAST_SUCCESS, "Image built");
                 setShowBuildModal(false);
                 refreshImages();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -541,14 +543,14 @@ function App() {
             try {
               const result = await invoke<CommandResult>("pull_image", { reference });
               if (result.success) {
-                showToast("success", "Image pulled");
+                showToast(TOAST_SUCCESS, "Image pulled");
                 setShowPullModal(false);
                 refreshImages();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -565,14 +567,14 @@ function App() {
             try {
               const result = await invoke<CommandResult>("tag_image", { source, target });
               if (result.success) {
-                showToast("success", "Image tagged");
+                showToast(TOAST_SUCCESS, "Image tagged");
                 setShowTagModal(false);
                 refreshImages();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -589,13 +591,13 @@ function App() {
             try {
               const result = await invoke<CommandResult>("push_image", { reference });
               if (result.success) {
-                showToast("success", "Image pushed");
+                showToast(TOAST_SUCCESS, "Image pushed");
                 setShowPushModal(false);
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -611,14 +613,14 @@ function App() {
             try {
               const result = await invoke<CommandResult>("create_volume", { name, size: size || null, labels: null, opts: null });
               if (result.success) {
-                showToast("success", "Volume created");
+                showToast(TOAST_SUCCESS, "Volume created");
                 setShowCreateVolumeModal(false);
                 refreshVolumes();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -642,14 +644,14 @@ function App() {
                 plugin: null,
               });
               if (result.success) {
-                showToast("success", "Network created");
+                showToast(TOAST_SUCCESS, "Network created");
                 setShowCreateNetworkModal(false);
                 refreshNetworks();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -677,14 +679,14 @@ function App() {
                 platform: null,
               });
               if (result.success) {
-                showToast("success", "Machine created");
+                showToast(TOAST_SUCCESS, "Machine created");
                 setShowCreateMachineModal(false);
                 refreshMachines();
               } else {
-                showToast("error", result.stderr);
+                showToast(TOAST_ERROR, result.stderr);
               }
             } catch (e) {
-              showToast("error", String(e));
+              showToast(TOAST_ERROR, String(e));
             } finally {
               setLoading(false);
             }
@@ -743,9 +745,9 @@ function App() {
                   setDetailView("image");
                 } catch { setDetailData(null); }
               } else {
-                showToast("error", r.stderr);
+                showToast(TOAST_ERROR, r.stderr);
               }
-            } catch (e) { showToast("error", String(e)); }
+            } catch (e) { showToast(TOAST_ERROR, String(e)); }
             finally { setDetailLoading(false); }
           }}
         />
@@ -770,9 +772,9 @@ function App() {
                   setDetailView("container");
                 } catch { setDetailData(null); }
               } else {
-                showToast("error", r.stderr);
+                showToast(TOAST_ERROR, r.stderr);
               }
-            } catch (e) { showToast("error", String(e)); }
+            } catch (e) { showToast(TOAST_ERROR, String(e)); }
             finally { setDetailLoading(false); }
           }}
         />

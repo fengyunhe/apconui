@@ -1,16 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { ToastType } from "../types";
 
 export function useToast() {
-  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ type: ToastType; text: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const showToast = useCallback((type: "success" | "error", text: string) => {
+  const showToast = useCallback((type: ToastType, text: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     setToastMessage({ type, text });
     timerRef.current = setTimeout(() => {
