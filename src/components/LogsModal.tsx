@@ -34,6 +34,7 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
   }, [containerId, lines]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [containerId]);

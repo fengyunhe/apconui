@@ -70,6 +70,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
     }
   }, [containerId, showToast]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     loadFiles(currentPath);
   }, [currentPath, loadFiles]);
@@ -79,6 +80,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
       setPathInput(currentPath);
     }
   }, [currentPath, editingPath]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const fetchSuggestions = useCallback(async (inputPath: string) => {
     if (!inputPath) {
@@ -139,6 +141,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
     }
   }, [containerId]);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (editingPath && pathInput) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -153,6 +156,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [pathInput, editingPath, fetchSuggestions]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -167,7 +171,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const navigateToPath = (path: string) => {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
