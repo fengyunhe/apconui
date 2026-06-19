@@ -9,10 +9,6 @@ interface SidebarProps {
   volumeCount: number;
   networkCount: number;
   machineCount: number;
-  systemStatus: string;
-  onSystemStart: () => void;
-  onSystemStop: () => void;
-  loading: boolean;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
@@ -20,7 +16,6 @@ interface SidebarProps {
 export function Sidebar({
   activeTab, setActiveTab,
   containerCount, imageCount, volumeCount, networkCount, machineCount,
-  systemStatus, onSystemStart, onSystemStop, loading,
   collapsed, onToggleCollapse,
 }: SidebarProps) {
   const { t } = useTranslation();
@@ -127,25 +122,6 @@ export function Sidebar({
           {!collapsed && <span>{t('sidebar.settings')}</span>}
         </button>
       </nav>
-
-      {!collapsed && (
-        <div className="sidebar-footer">
-          <div className="system-controls">
-            <div className="system-status-row">
-              <span className="system-label">{t('sidebar.service')}</span>
-              <span className={`status-dot status-dot-${systemStatus}`} title={systemStatus}></span>
-            </div>
-            <div className="system-buttons">
-              <button className="btn btn-sm btn-success" onClick={onSystemStart} disabled={loading}>
-                {t('sidebar.start')}
-              </button>
-              <button className="btn btn-sm btn-danger" onClick={onSystemStop} disabled={loading}>
-                {t('sidebar.stop')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

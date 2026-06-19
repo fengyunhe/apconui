@@ -1,28 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from 'react-i18next';
 import type { CommandResult } from "../types";
 
 export function TerminalTab() {
   const { t } = useTranslation();
-  const [socketStatus, setSocketStatus] = useState<"checking" | "connected" | "disconnected">("checking");
   const [opening, setOpening] = useState(false);
-
-  const checkSocketStatus = useCallback(async () => {
-    try {
-      const result = await invoke<CommandResult>("run_raw_command", { command: "system status" });
-      setSocketStatus(result.success && result.stdout.toLowerCase().includes("running") ? "connected" : "disconnected");
-    } catch {
-      setSocketStatus("disconnected");
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    checkSocketStatus();
-    const interval = setInterval(checkSocketStatus, 10000);
-    return () => clearInterval(interval);
-  }, [checkSocketStatus]);
 
   const handleOpenTerminal = async () => {
     setOpening(true);
@@ -42,15 +25,6 @@ export function TerminalTab() {
     <div className="tab-content">
       <div className="tab-header">
         <h2>{t('terminal.title')}</h2>
-        <div className="tab-actions">
-          {/* Socket Status Indicator */}
-          <div className="socket-status" title={`Docker Socket: ${socketStatus}`}>
-            <span className={`socket-dot socket-dot-${socketStatus}`}></span>
-            <span className="socket-label">
-              {socketStatus === "connected" ? "Socket OK" : socketStatus === "checking" ? "Checking..." : "Socket N/A"}
-            </span>
-          </div>
-        </div>
       </div>
       <div className="terminal-tab" style={{ 
         height: "calc(100vh - 140px)", 

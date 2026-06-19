@@ -42,7 +42,6 @@ function App() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("containers");
   const [loading, setLoading] = useState(false);
-  const [systemStatus, setSystemStatus] = useState<string>("unknown");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return localStorage.getItem("sidebar-collapsed") === "true";
@@ -112,26 +111,37 @@ function App() {
     return () => clearInterval(interval);
   }, [refreshAll]);
 
-  const handleCheckSystemStatus = useCallback(async () => {
-    try {
-      const result = await invoke<CommandResult>("run_raw_command", { command: "system status" });
-      if (result.success && result.stdout.toLowerCase().includes("running")) {
-        setSystemStatus("running");
-      } else {
-        setSystemStatus("stopped");
-      }
-    } catch {
-      setSystemStatus("unknown");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Check system status on startup and prompt to start if not running
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    handleCheckSystemStatus();
-    const interval = setInterval(handleCheckSystemStatus, 10000);
-    return () => clearInterval(interval);
-  }, [handleCheckSystemStatus]);
+    const checkAndPrompt = async () => {
+      try {
+        const result = await invoke<CommandResult>("run_raw_command", { command: "container system status" });
+        const isRunning = result.success && result.stdout.toLowerCase().includes("running");
+        if (!isRunning) {
+          const shouldStart = await confirm("Container service is not running. Start it now?");
+          if (shouldStart) {
+            setLoading(true);
+            try {
+              const startResult = await invoke<CommandResult>("system_start");
+              if (startResult.success) {
+                showToast("success", "Container service started");
+                refreshAll();
+              } else {
+                showToast("error", startResult.stderr);
+              }
+            } catch (e) {
+              showToast("error", String(e));
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      } catch {
+        // Ignore errors during startup check
+      }
+    };
+    checkAndPrompt();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cmd+, shortcut to open settings, Cmd+T to open terminal, Cmd+1-7 to switch tabs
   useEffect(() => {
@@ -294,41 +304,6 @@ function App() {
     }
   };
 
-  const handleSystemStart = async () => {
-    setLoading(true);
-    try {
-      const result = await invoke<CommandResult>("system_start");
-      if (result.success) {
-        showToast(TOAST_SUCCESS, t('toast.systemStarted'));
-        handleCheckSystemStatus();
-      } else {
-        showToast(TOAST_ERROR, result.stderr);
-      }
-    } catch (e) {
-      showToast(TOAST_ERROR, String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSystemStop = async () => {
-    if (!await confirm(t('confirm.stopSystem'))) return;
-    setLoading(true);
-    try {
-      const result = await invoke<CommandResult>("system_stop");
-      if (result.success) {
-        showToast(TOAST_SUCCESS, t('toast.systemStopped'));
-        handleCheckSystemStatus();
-      } else {
-        showToast(TOAST_ERROR, result.stderr);
-      }
-    } catch (e) {
-      showToast(TOAST_ERROR, String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="app">
       {toastMessage && (
@@ -345,10 +320,6 @@ function App() {
         volumeCount={volumes.length}
         networkCount={networks.length}
         machineCount={machines.length}
-        systemStatus={systemStatus}
-        onSystemStart={handleSystemStart}
-        onSystemStop={handleSystemStop}
-        loading={loading}
         collapsed={sidebarCollapsed}
         onToggleCollapse={handleSidebarToggle}
       />

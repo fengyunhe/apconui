@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { ToastType } from "../types";
+import type { ToastType } from "../types";
 
 export function useToast() {
   const [toastMessage, setToastMessage] = useState<{ type: ToastType; text: string } | null>(null);
