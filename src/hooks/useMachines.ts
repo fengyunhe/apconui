@@ -1,10 +1,10 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, Machine } from "../types";
-import { parseJsonArray } from "../utils";
+import type { CommandResult, Machine, ToastType } from "../types";
+import { parseJsonArray, TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface UseMachinesParams {
-  showToast: (type: "success" | "error", text: string) => void;
+  showToast: (type: ToastType, text: string) => void;
   confirm: (message: string) => Promise<boolean>;
   setLoading: (v: boolean) => void;
 }
@@ -63,7 +63,7 @@ export function useMachines({ showToast, confirm, setLoading }: UseMachinesParam
             }
             extras.setShowInspectModal(true);
           } else if (!result.success) {
-            showToast("error", result.stderr || "Failed to inspect machine");
+            showToast(TOAST_ERROR, result.stderr || "Failed to inspect machine");
           }
           setLoading(false);
           return;
@@ -71,13 +71,13 @@ export function useMachines({ showToast, confirm, setLoading }: UseMachinesParam
           return;
       }
       if (result.success) {
-        showToast("success", `Machine ${action} succeeded`);
+        showToast(TOAST_SUCCESS, `Machine ${action} succeeded`);
         refreshMachines();
       } else {
-        showToast("error", result.stderr || `Failed to ${action} machine`);
+        showToast(TOAST_ERROR, result.stderr || `Failed to ${action} machine`);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }

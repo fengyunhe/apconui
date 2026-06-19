@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from 'react-i18next';
-import type { CommandResult } from "../types";
+import type { CommandResult, ToastType } from "../types";
+import { TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface FileEditorModalProps {
   containerId: string;
   initialPath?: string;
   onClose: () => void;
-  showToast: (type: "success" | "error", message: string) => void;
+  showToast: (type: ToastType, message: string) => void;
 }
 
 interface FileEntry {
@@ -59,11 +60,11 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
         }).filter((e: FileEntry | null): e is FileEntry => e !== null);
         setFiles(parsed);
       } else {
-        showToast("error", result.stderr || "Failed to list files");
+        showToast(TOAST_ERROR, result.stderr || "Failed to list files");
         setFiles([]);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
       setFiles([]);
     } finally {
       setLoading(false);
@@ -171,7 +172,8 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const navigateToPath = (path: string) => {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;
@@ -239,10 +241,10 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
         setEditingFile(filePath);
         setFileContent(result.stdout);
       } else {
-        showToast("error", result.stderr || "Failed to read file");
+        showToast(TOAST_ERROR, result.stderr || "Failed to read file");
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -258,12 +260,12 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
         content: fileContent,
       });
       if (result.success) {
-        showToast("success", `File saved: ${editingFile}`);
+        showToast(TOAST_SUCCESS, `File saved: ${editingFile}`);
       } else {
-        showToast("error", result.stderr || "Failed to save file");
+        showToast(TOAST_ERROR, result.stderr || "Failed to save file");
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setSaving(false);
     }
@@ -277,16 +279,16 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
         path: filePath,
       });
       if (result.success) {
-        showToast("success", `Deleted: ${name}`);
+        showToast(TOAST_SUCCESS, `Deleted: ${name}`);
         loadFiles(currentPath);
         if (editingFile === filePath) {
           setEditingFile(null);
         }
       } else {
-        showToast("error", result.stderr || "Failed to delete file");
+        showToast(TOAST_ERROR, result.stderr || "Failed to delete file");
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     }
   };
 

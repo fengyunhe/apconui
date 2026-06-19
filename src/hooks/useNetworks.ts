@@ -1,10 +1,10 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, Network, RawNetwork } from "../types";
-import { parseJsonArray, mapNetworks } from "../utils";
+import type { CommandResult, Network, RawNetwork, ToastType } from "../types";
+import { parseJsonArray, mapNetworks, TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface UseNetworksParams {
-  showToast: (type: "success" | "error", text: string) => void;
+  showToast: (type: ToastType, text: string) => void;
   confirm: (message: string) => Promise<boolean>;
   setLoading: (v: boolean) => void;
 }
@@ -38,13 +38,13 @@ export function useNetworks({ showToast, confirm, setLoading }: UseNetworksParam
           return;
       }
       if (result.success) {
-        showToast("success", `Network ${action} succeeded`);
+        showToast(TOAST_SUCCESS, `Network ${action} succeeded`);
         refreshNetworks();
       } else {
-        showToast("error", result.stderr || `Failed to ${action} network`);
+        showToast(TOAST_ERROR, result.stderr || `Failed to ${action} network`);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -56,13 +56,13 @@ export function useNetworks({ showToast, confirm, setLoading }: UseNetworksParam
     try {
       const result = await invoke<CommandResult>("prune_networks");
       if (result.success) {
-        showToast("success", "Networks pruned");
+        showToast(TOAST_SUCCESS, "Networks pruned");
         refreshNetworks();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }

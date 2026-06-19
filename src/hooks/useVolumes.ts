@@ -1,10 +1,10 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { CommandResult, Volume, RawVolume } from "../types";
-import { parseJsonArray, mapVolumes } from "../utils";
+import type { CommandResult, Volume, RawVolume, ToastType } from "../types";
+import { parseJsonArray, mapVolumes, TOAST_ERROR, TOAST_SUCCESS } from "../utils";
 
 interface UseVolumesParams {
-  showToast: (type: "success" | "error", text: string) => void;
+  showToast: (type: ToastType, text: string) => void;
   confirm: (message: string) => Promise<boolean>;
   setLoading: (v: boolean) => void;
 }
@@ -38,13 +38,13 @@ export function useVolumes({ showToast, confirm, setLoading }: UseVolumesParams)
           return;
       }
       if (result.success) {
-        showToast("success", `Volume ${action} succeeded`);
+        showToast(TOAST_SUCCESS, `Volume ${action} succeeded`);
         refreshVolumes();
       } else {
-        showToast("error", result.stderr || `Failed to ${action} volume`);
+        showToast(TOAST_ERROR, result.stderr || `Failed to ${action} volume`);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
@@ -56,13 +56,13 @@ export function useVolumes({ showToast, confirm, setLoading }: UseVolumesParams)
     try {
       const result = await invoke<CommandResult>("prune_volumes");
       if (result.success) {
-        showToast("success", "Volumes pruned");
+        showToast(TOAST_SUCCESS, "Volumes pruned");
         refreshVolumes();
       } else {
-        showToast("error", result.stderr);
+        showToast(TOAST_ERROR, result.stderr);
       }
     } catch (e) {
-      showToast("error", String(e));
+      showToast(TOAST_ERROR, String(e));
     } finally {
       setLoading(false);
     }
