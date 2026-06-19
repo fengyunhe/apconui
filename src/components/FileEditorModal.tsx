@@ -171,7 +171,7 @@ export function FileEditorModal({ containerId, initialPath = "/", onClose, showT
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const navigateToPath = (path: string) => {
     const normalizedPath = path.startsWith("/") ? path : `/${path}`;

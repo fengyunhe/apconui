@@ -8,7 +8,7 @@ export function useToast() {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const showToast = useCallback((type: "success" | "error", text: string) => {
     if (timerRef.current) clearTimeout(timerRef.current);

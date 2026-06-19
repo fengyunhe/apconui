@@ -123,7 +123,7 @@ function App() {
     } catch {
       setSystemStatus("unknown");
     }
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -151,7 +151,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable
 
   const handleLogs = async (id: string) => {
     setLogsContainerId(id);
