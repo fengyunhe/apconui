@@ -123,7 +123,7 @@ function App() {
     } catch {
       setSystemStatus("unknown");
     }
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   useEffect(() => {
     handleCheckSystemStatus();
@@ -150,7 +150,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const handleLogs = async (id: string) => {
     setLogsContainerId(id);

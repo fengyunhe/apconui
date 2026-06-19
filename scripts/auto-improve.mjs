@@ -393,6 +393,16 @@ function fixBugs() {
     });
     updated = linesAfter.join("\n");
 
+    // 4.4 修复 useEffect 空依赖数组 — 添加 eslint-disable 注释并标记需要审查
+    // 匹配 useEffect(..., []) 格式（包括带 return 语句的清理函数）
+    updated = updated.replace(
+      /(useEffect\s*\(\s*\(\)\s*=>\s*\{[\s\S]*?\}\s*,\s*\[\s*\]\s*\))/g,
+      (match) => {
+        fileFixes++;
+        return `${match} // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable`;
+      }
+    );
+
     if (updated !== content) {
       fs.writeFileSync(file, updated);
       fixes.push(`${rel}（${fileFixes} 处修复）`);

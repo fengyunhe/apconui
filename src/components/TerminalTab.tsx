@@ -12,7 +12,7 @@ export function TerminalTab() {
     checkSocketStatus();
     const interval = setInterval(checkSocketStatus, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const checkSocketStatus = async () => {
     try {

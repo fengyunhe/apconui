@@ -73,13 +73,13 @@ export function SettingsTab() {
     checkSocktainerStatus();
     const interval = setInterval(checkSocktainerStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   useEffect(() => {
     checkSocketStatus();
     const interval = setInterval(checkSocketStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const checkSocketStatus = async () => {
     try {
