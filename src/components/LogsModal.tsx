@@ -44,7 +44,7 @@ export function LogsModal({ containerId, onClose }: LogsModalProps) {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   return (
     <Modal onClose={onClose}>

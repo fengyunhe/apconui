@@ -1,14 +1,15 @@
 {
-  "lastRun": "2026-06-19T20:00:31.456Z",
+  "lastRun": "2026-06-20T02:01:24.869Z",
   "appliedFixes": [
     "2026-06-17T22-02-53-590Z: 1 个文件被修复",
     "2026-06-19T03-03-26-383Z: 6 个文件被修复",
-    "2026-06-19T20-00-31-456Z: 5 个文件被修复"
+    "2026-06-19T20-00-31-456Z: 5 个文件被修复",
+    "2026-06-20T02-01-24-869Z: 5 个文件被修复"
   ],
   "appliedRequirements": [
     "2026-06-15T23-26-40-403Z: REQ-toast-constants — 抽取 TOAST_ERROR/TOAST_SUCCESS 常量",
     "2026-06-15T23-26-40-403Z: REQ-shared-types — 补充 ToastType / ConfirmDialog / Tab 类型",
     "2026-06-15T23-26-40-403Z: REQ-theme-vars — 添加设计系统 CSS 变量到 index.css"
   ],
-  "runCount": 7
+  "runCount": 8
 }
