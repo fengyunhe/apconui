@@ -112,7 +112,7 @@ export function SettingsTab() {
       setSocketStatus("disconnected");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

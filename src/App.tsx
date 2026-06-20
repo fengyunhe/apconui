@@ -141,7 +141,7 @@ function App() {
       }
     };
     checkAndPrompt();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable; // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cmd+, shortcut to open settings, Cmd+T to open terminal, Cmd+1-7 to switch tabs
   useEffect(() => {
@@ -163,7 +163,7 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []) // TODO: [auto-fix] empty deps — verify if intentional; add deps or suppress with eslint-disable;
 
   const handleLogs = async (id: string) => {
     setLogsContainerId(id);
