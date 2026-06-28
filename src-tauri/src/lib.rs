@@ -2465,12 +2465,19 @@ async fn docker_list_all() -> CommandResult {
     // Parse containers
     let mut containers = Vec::new();
     let mut volume_usage: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut image_usage: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     if ctr_result.success {
         for line in ctr_result.stdout.lines() {
             if line.trim().is_empty() { continue; }
             if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
                 let id = obj.get("ID").and_then(|v| v.as_str()).unwrap_or("");
                 let names = obj.get("Names").and_then(|v| v.as_str()).unwrap_or("");
+                let image = obj.get("Image").and_then(|v| v.as_str()).unwrap_or("");
+                // Track image usage
+                if !image.is_empty() {
+                    let name_clean = names.trim_start_matches('/').to_string();
+                    image_usage.entry(image.to_string()).or_default().push(name_clean);
+                }
                 // Extract volume mounts from Mounts field
                 let mut mounts = Vec::new();
                 if let Some(mounts_str) = obj.get("Mounts").and_then(|v| v.as_str()) {
@@ -2505,6 +2512,7 @@ async fn docker_list_all() -> CommandResult {
         "volumes": volumes,
         "containers": containers,
         "volumeUsage": volume_usage,
+        "imageUsage": image_usage,
         "dockerAvailable": img_result.success || vol_result.success || ctr_result.success,
     });
 

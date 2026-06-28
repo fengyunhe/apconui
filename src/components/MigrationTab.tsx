@@ -54,6 +54,7 @@ interface DockerImportState {
   volumes: DockerResource[];
   containers: DockerContainer[];
   volumeUsage: Record<string, string[]>;
+  imageUsage: Record<string, string[]>;
   selectedImages: Set<string>;
   selectedVolumes: Set<string>;
   selectedContainers: Set<string>;
@@ -90,6 +91,7 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
     volumes: [],
     containers: [],
     volumeUsage: {},
+    imageUsage: {},
     selectedImages: new Set(),
     selectedVolumes: new Set(),
     selectedContainers: new Set(),
@@ -135,6 +137,7 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
             }))
           : [];
         const volumeUsage: Record<string, string[]> = data.volumeUsage || {};
+        const imageUsage: Record<string, string[]> = data.imageUsage || {};
 
         setDockerState(prev => ({
           ...prev,
@@ -142,6 +145,7 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
           volumes,
           containers,
           volumeUsage,
+          imageUsage,
           loading: false,
           selectedImages: new Set(),
           selectedVolumes: new Set(),
@@ -193,6 +197,7 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
       volumes: [],
       containers: [],
       volumeUsage: {},
+      imageUsage: {},
       selectedImages: new Set(),
       selectedVolumes: new Set(),
       selectedContainers: new Set(),
@@ -996,13 +1001,16 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
                     <th>ID</th>
                     <th>Virtual Size</th>
                     <th>Disk Usage</th>
+                    <th>{t('containers.title')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDockerImages.length === 0 ? (
-                    <tr><td colSpan={6} className="empty-row">{dockerFilter ? t('containers.noMatch') : t('migration.noDockerImages')}</td></tr>
+                    <tr><td colSpan={7} className="empty-row">{dockerFilter ? t('containers.noMatch') : t('migration.noDockerImages')}</td></tr>
                   ) : (
-                    filteredDockerImages.map(img => (
+                    filteredDockerImages.map(img => {
+                      const usedBy = dockerState.imageUsage[`${img.name}:${img.tag}`] || [];
+                      return (
                       <tr key={`${img.name}:${img.tag}`}>
                         <td>
                           <input
@@ -1016,8 +1024,10 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
                         <td className="cell-digest">{img.id}</td>
                         <td>{img.size || "-"}</td>
                         <td>{img.uniqueSize || "-"}</td>
+                        <td>{usedBy.length > 0 ? `${usedBy.length}` : "-"}</td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>
