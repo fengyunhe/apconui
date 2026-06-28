@@ -2366,16 +2366,47 @@ async fn docker_list_all() -> CommandResult {
     // Parse images
     let mut images = Vec::new();
     if img_result.success {
+        // Get image detailed sizes from docker system df -v
+        let df_result = run_docker_cmd_async(vec![
+            "system".into(), "df".into(), "-v".into()
+        ]).await;
+
+        let mut image_sizes: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
+        if df_result.success {
+            let mut in_image_section = false;
+            for line in df_result.stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("REPOSITORY") && trimmed.contains("UNIQUE SIZE") {
+                    in_image_section = true;
+                    continue;
+                }
+                if in_image_section && !trimmed.is_empty() {
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    // Format: repo tag id created size shared_size unique_size containers
+                    if parts.len() >= 7 {
+                        let id = parts[2];
+                        let unique_size = parts[6];
+                        // Find SIZE (column 5, 0-indexed)
+                        let size = parts[4];
+                        image_sizes.insert(id.to_string(), (size.to_string(), unique_size.to_string()));
+                    }
+                }
+                if in_image_section && trimmed.is_empty() && !image_sizes.is_empty() {
+                    break;
+                }
+            }
+        }
+
         for line in img_result.stdout.lines() {
             if line.trim().is_empty() { continue; }
             if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
                 let repo = obj.get("Repository").and_then(|v| v.as_str()).unwrap_or("");
                 let tag = obj.get("Tag").and_then(|v| v.as_str()).unwrap_or("latest");
-                let size = obj.get("Size").and_then(|v| v.as_str()).unwrap_or("");
                 let id = obj.get("ID").and_then(|v| v.as_str()).unwrap_or("");
                 if !repo.is_empty() && repo != "<none>" {
+                    let (virtual_size, unique_size) = image_sizes.get(id).cloned().unwrap_or_default();
                     images.push(serde_json::json!({
-                        "Repository": repo, "Tag": tag, "Size": size, "ID": id,
+                        "Repository": repo, "Tag": tag, "Size": virtual_size, "UniqueSize": unique_size, "ID": id,
                     }));
                 }
             }

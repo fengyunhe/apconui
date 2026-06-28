@@ -34,8 +34,10 @@ interface ImportState {
 }
 
 interface DockerResource {
+  id: string;
   name: string;
-  size?: string;
+  size: string;
+  uniqueSize: string;
   tag?: string;
 }
 
@@ -108,15 +110,19 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
         const data = JSON.parse(result.stdout);
         const images: DockerResource[] = Array.isArray(data.images)
           ? data.images.map((obj: Record<string, string>) => ({
+              id: obj.ID || "",
               name: obj.Repository || "",
               tag: obj.Tag || "latest",
               size: obj.Size || "",
+              uniqueSize: obj.UniqueSize || "",
             }))
           : [];
         const volumes: DockerResource[] = Array.isArray(data.volumes)
           ? data.volumes.map((obj: Record<string, string>) => ({
+              id: "",
               name: obj.Name || "",
               size: obj.Size || "",
+              uniqueSize: "",
             }))
           : [];
         const containers: DockerContainer[] = Array.isArray(data.containers)
@@ -891,7 +897,12 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
     ? dockerState.images.filter(i => `${i.name}:${i.tag}`.toLowerCase().includes(dockerFilterLower))
     : dockerState.images;
   const filteredDockerVolumes = dockerFilter
-    ? dockerState.volumes.filter(v => v.name.toLowerCase().includes(dockerFilterLower))
+    ? dockerState.volumes.filter(v => {
+        if (v.name.toLowerCase().includes(dockerFilterLower)) return true;
+        const usedBy = dockerState.volumeUsage[v.name];
+        if (usedBy && usedBy.some(name => name.toLowerCase().includes(dockerFilterLower))) return true;
+        return false;
+      })
     : dockerState.volumes;
   const filteredDockerContainers = dockerFilter
     ? dockerState.containers.filter(c => c.id.toLowerCase().includes(dockerFilterLower) || c.names.toLowerCase().includes(dockerFilterLower) || c.image.toLowerCase().includes(dockerFilterLower))
@@ -982,12 +993,14 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
                     </th>
                     <th>{t('images.repository')}</th>
                     <th>{t('images.tag')}</th>
-                    <th>{t('images.size')}</th>
+                    <th>ID</th>
+                    <th>Virtual Size</th>
+                    <th>Disk Usage</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDockerImages.length === 0 ? (
-                    <tr><td colSpan={4} className="empty-row">{dockerFilter ? t('containers.noMatch') : t('migration.noDockerImages')}</td></tr>
+                    <tr><td colSpan={6} className="empty-row">{dockerFilter ? t('containers.noMatch') : t('migration.noDockerImages')}</td></tr>
                   ) : (
                     filteredDockerImages.map(img => (
                       <tr key={`${img.name}:${img.tag}`}>
@@ -1000,7 +1013,9 @@ export function MigrationTab({ images, volumes, containers, onRefresh }: Migrati
                         </td>
                         <td>{img.name}</td>
                         <td><span className="tag-badge">{img.tag}</span></td>
+                        <td className="cell-digest">{img.id}</td>
                         <td>{img.size || "-"}</td>
+                        <td>{img.uniqueSize || "-"}</td>
                       </tr>
                     ))
                   )}

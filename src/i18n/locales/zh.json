@@ -33,6 +33,7 @@
     "image": "镜像",
     "command": "命令",
     "state": "状态",
+    "status": "状态详情",
     "ip": "IP",
     "ports": "端口",
     "resources": "资源",

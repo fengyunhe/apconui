@@ -33,6 +33,7 @@
     "image": "Image",
     "command": "Command",
     "state": "State",
+    "status": "Status",
     "ip": "IP",
     "ports": "Ports",
     "resources": "Resources",
