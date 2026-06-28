@@ -2382,12 +2382,16 @@ async fn docker_list_all() -> CommandResult {
                 }
                 if in_image_section && !trimmed.is_empty() {
                     let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                    // Format: repo tag id created size shared_size unique_size containers
+                    // Format: repo tag id created... size shared_size unique_size containers
+                    // "created" can be multiple words like "26 hours ago"
+                    // So we take the last 4 fields: size, shared_size, unique_size, containers
+                    // and the 3rd field (index 2) is IMAGE ID
                     if parts.len() >= 7 {
                         let id = parts[2];
-                        let unique_size = parts[6];
-                        // Find SIZE (column 5, 0-indexed)
-                        let size = parts[4];
+                        let containers_count = parts.last().unwrap_or(&"0");
+                        let unique_size = parts[parts.len() - 2];
+                        let shared_size = parts[parts.len() - 3];
+                        let size = parts[parts.len() - 4];
                         image_sizes.insert(id.to_string(), (size.to_string(), unique_size.to_string()));
                     }
                 }
