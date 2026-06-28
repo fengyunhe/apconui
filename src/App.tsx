@@ -21,6 +21,7 @@ import { NetworksTab } from "./components/NetworksTab";
 import { MachinesTab } from "./components/MachinesTab";
 import { TerminalTab } from "./components/TerminalTab";
 import { SettingsTab } from "./components/SettingsTab";
+import { MigrationTab } from "./components/MigrationTab";
 import { RunContainerModal } from "./components/RunContainerModal";
 import { BuildImageModal } from "./components/BuildImageModal";
 import { PullImageModal } from "./components/PullImageModal";
@@ -145,7 +146,7 @@ function App() {
 
   // Cmd+, shortcut to open settings, Cmd+T to open terminal, Cmd+1-7 to switch tabs
   useEffect(() => {
-    const tabs: Tab[] = ["containers", "images", "volumes", "networks", "machines", "terminal", "settings"];
+    const tabs: Tab[] = ["containers", "images", "volumes", "networks", "machines", "terminal", "migration", "settings"];
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ",") {
         e.preventDefault();
@@ -155,7 +156,7 @@ function App() {
         e.preventDefault();
         setActiveTab("terminal");
       }
-      if ((e.metaKey || e.ctrlKey) && e.key >= "1" && e.key <= "7") {
+      if ((e.metaKey || e.ctrlKey) && e.key >= "1" && e.key <= "8") {
         e.preventDefault();
         setActiveTab(tabs[parseInt(e.key) - 1]);
       }
@@ -431,6 +432,16 @@ function App() {
 
         {activeTab === "terminal" && (
           <TerminalTab />
+        )}
+
+        {activeTab === "migration" && (
+          <MigrationTab
+            images={images}
+            volumes={volumes}
+            containers={containers}
+            loading={loading}
+            onRefresh={refreshAll}
+          />
         )}
 
         {activeTab === "settings" && <SettingsTab />}

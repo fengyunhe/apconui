@@ -1671,6 +1671,1136 @@ fn open_url(url: String) -> CommandResult {
     }
 }
 
+// ==================== Volume Export/Import ====================
+
+#[tauri::command]
+async fn export_volume(name: String, output: String) -> CommandResult {
+    // Get volume mountpoint
+    let inspect = run_container_cmd_async(vec!["volume".into(), "inspect".into(), name.clone()]).await;
+    if !inspect.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to inspect volume: {}", inspect.stderr),
+        };
+    }
+
+    let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+    let mountpoint = match parsed {
+        Ok(arr) if !arr.is_empty() => {
+            arr[0].get("configuration")
+                .and_then(|c| c.get("source"))
+                .and_then(|v| v.as_str())
+                .or_else(|| arr[0].get("Mountpoint").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_string()
+        }
+        _ => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Could not determine volume mountpoint".to_string(),
+            };
+        }
+    };
+
+    if mountpoint.is_empty() {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Volume mountpoint is empty".to_string(),
+        };
+    }
+
+    // Create parent directory if needed
+    if let Some(parent) = std::path::Path::new(&output).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    // Tar the volume data
+    let mountpoint_clone = mountpoint.clone();
+    let output_clone = output.clone();
+    tokio::task::spawn_blocking(move || {
+        let result = std::process::Command::new("tar")
+            .args(["-cf", &output_clone, "-C", &mountpoint_clone, "."])
+            .output();
+        match result {
+            Ok(output) => CommandResult {
+                success: output.status.success(),
+                stdout: String::new(),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            },
+            Err(e) => CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to create tar: {e}"),
+            },
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
+}
+
+#[tauri::command]
+async fn import_volume(name: String, input: String) -> CommandResult {
+    // Create the volume
+    let create = run_container_cmd_async(vec!["volume".into(), "create".into(), name.clone()]).await;
+    if !create.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to create volume: {}", create.stderr),
+        };
+    }
+
+    // Get the new volume's mountpoint
+    let inspect = run_container_cmd_async(vec!["volume".into(), "inspect".into(), name.clone()]).await;
+    if !inspect.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to inspect created volume: {}", inspect.stderr),
+        };
+    }
+
+    let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+    let mountpoint = match parsed {
+        Ok(arr) if !arr.is_empty() => {
+            arr[0].get("configuration")
+                .and_then(|c| c.get("source"))
+                .and_then(|v| v.as_str())
+                .or_else(|| arr[0].get("Mountpoint").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_string()
+        }
+        _ => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Could not determine volume mountpoint".to_string(),
+            };
+        }
+    };
+
+    if mountpoint.is_empty() {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Volume mountpoint is empty".to_string(),
+        };
+    }
+
+    // Extract tar to volume mountpoint
+    let mountpoint_clone = mountpoint.clone();
+    let input_clone = input.clone();
+    tokio::task::spawn_blocking(move || {
+        let result = std::process::Command::new("tar")
+            .args(["-xf", &input_clone, "-C", &mountpoint_clone])
+            .output();
+        match result {
+            Ok(output) => CommandResult {
+                success: output.status.success(),
+                stdout: format!("Volume '{name}' imported successfully"),
+                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            },
+            Err(e) => CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to extract tar: {e}"),
+            },
+        }
+    })
+    .await
+    .unwrap_or_else(|e| CommandResult {
+        success: false,
+        stdout: String::new(),
+        stderr: format!("Task failed: {e}"),
+    })
+}
+
+// ==================== Batch Migration ====================
+
+#[tauri::command]
+async fn export_migration(
+    images: Vec<String>,
+    volumes: Vec<String>,
+    containers: Vec<String>,
+    output_dir: String,
+) -> CommandResult {
+    use std::path::PathBuf;
+
+    let out = PathBuf::from(&output_dir);
+    let images_dir = out.join("images");
+    let volumes_dir = out.join("volumes");
+    let containers_dir = out.join("containers");
+
+    // Create directories
+    let _ = std::fs::create_dir_all(&images_dir);
+    let _ = std::fs::create_dir_all(&volumes_dir);
+    let _ = std::fs::create_dir_all(&containers_dir);
+
+    let mut manifest_images = Vec::new();
+    let mut manifest_volumes = Vec::new();
+    let mut manifest_containers = Vec::new();
+    let mut errors = Vec::new();
+
+    // Export images
+    for img in &images {
+        let safe_name = img.replace('/', "_").replace(':', "_");
+        let tar_path = images_dir.join(format!("{safe_name}.tar"));
+        let tar_str = tar_path.to_string_lossy().to_string();
+
+        let result = run_container_cmd_async(vec![
+            "image".into(), "save".into(), "-o".into(), tar_str.clone(), img.clone()
+        ]).await;
+
+        if result.success {
+            let size = std::fs::metadata(&tar_path).map(|m| m.len()).unwrap_or(0);
+            manifest_images.push(serde_json::json!({
+                "name": img,
+                "file": format!("images/{safe_name}.tar"),
+                "size": size,
+            }));
+        } else {
+            errors.push(format!("Failed to export image {img}: {}", result.stderr));
+        }
+    }
+
+    // Export volumes
+    for vol in &volumes {
+        let tar_path = volumes_dir.join(format!("{vol}.tar"));
+        let tar_str = tar_path.to_string_lossy().to_string();
+
+        // Get mountpoint
+        let inspect = run_container_cmd_async(vec!["volume".into(), "inspect".into(), vol.clone()]).await;
+        if !inspect.success {
+            errors.push(format!("Failed to inspect volume {vol}: {}", inspect.stderr));
+            continue;
+        }
+
+        let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+        let mountpoint = match parsed {
+            Ok(arr) if !arr.is_empty() => {
+                arr[0].get("configuration")
+                    .and_then(|c| c.get("source"))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| arr[0].get("Mountpoint").and_then(|v| v.as_str()))
+                    .unwrap_or("")
+                    .to_string()
+            }
+            _ => {
+                errors.push(format!("Could not determine mountpoint for volume {vol}"));
+                continue;
+            }
+        };
+
+        if mountpoint.is_empty() {
+            errors.push(format!("Empty mountpoint for volume {vol}"));
+            continue;
+        }
+
+        let mountpoint_clone = mountpoint.clone();
+        let tar_str_clone = tar_str.clone();
+        let tar_result = tokio::task::spawn_blocking(move || {
+            std::process::Command::new("tar")
+                .args(["-cf", &tar_str_clone, "-C", &mountpoint_clone, "."])
+                .output()
+        })
+        .await;
+
+        match tar_result {
+            Ok(Ok(output)) if output.status.success() => {
+                let size = std::fs::metadata(&tar_path).map(|m| m.len()).unwrap_or(0);
+                manifest_volumes.push(serde_json::json!({
+                    "name": vol,
+                    "file": format!("volumes/{vol}.tar"),
+                    "size": size,
+                }));
+            }
+            _ => {
+                errors.push(format!("Failed to export volume {vol}"));
+            }
+        }
+    }
+
+    // Export containers
+    for container_id in &containers {
+        // Inspect container to get config
+        let inspect = run_container_cmd_async(vec!["inspect".into(), container_id.clone()]).await;
+        if !inspect.success {
+            errors.push(format!("Failed to inspect container {container_id}: {}", inspect.stderr));
+            continue;
+        }
+
+        let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+        let config = match parsed {
+            Ok(arr) if !arr.is_empty() => arr[0].clone(),
+            _ => {
+                errors.push(format!("Could not parse container config for {container_id}"));
+                continue;
+            }
+        };
+
+        // Extract container name
+        let name = config.get("configuration")
+            .and_then(|c| c.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(container_id)
+            .to_string();
+
+        // Save container config
+        let config_path = containers_dir.join(format!("{name}.json"));
+        let _ = std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap_or_default());
+
+        // Export container filesystem
+        let fs_tar_path = containers_dir.join(format!("{name}.fs.tar"));
+        let fs_tar_str = fs_tar_path.to_string_lossy().to_string();
+        let container_id_clone = container_id.clone();
+        let export_result = tokio::task::spawn_blocking(move || {
+            std::process::Command::new("/usr/local/bin/container")
+                .args(["export", "-o", &fs_tar_str, &container_id_clone])
+                .output()
+        })
+        .await;
+
+        let fs_size = match export_result {
+            Ok(Ok(output)) if output.status.success() => {
+                std::fs::metadata(&fs_tar_path).map(|m| m.len()).unwrap_or(0)
+            }
+            _ => {
+                errors.push(format!("Failed to export container filesystem for {container_id}"));
+                0
+            }
+        };
+
+        let config_size = std::fs::metadata(&config_path).map(|m| m.len()).unwrap_or(0);
+        manifest_containers.push(serde_json::json!({
+            "id": container_id,
+            "name": name,
+            "config_file": format!("containers/{name}.json"),
+            "config_size": config_size,
+            "filesystem_file": format!("containers/{name}.fs.tar"),
+            "filesystem_size": fs_size,
+        }));
+    }
+
+    // Write manifest
+    let manifest = serde_json::json!({
+        "version": "1.0",
+        "created": format!("{:?}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()),
+        "images": manifest_images,
+        "volumes": manifest_volumes,
+        "containers": manifest_containers,
+    });
+
+    let manifest_path = out.join("manifest.json");
+    let _ = std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap_or_default());
+
+    if errors.is_empty() {
+        CommandResult {
+            success: true,
+            stdout: format!("Migration exported to {output_dir}"),
+            stderr: String::new(),
+        }
+    } else {
+        CommandResult {
+            success: !manifest_images.is_empty() || !manifest_volumes.is_empty(),
+            stdout: format!("Exported {} images, {} volumes, {} containers",
+                manifest_images.len(), manifest_volumes.len(), manifest_containers.len()),
+            stderr: errors.join("\n"),
+        }
+    }
+}
+
+#[tauri::command]
+async fn import_migration(
+    input_dir: String,
+    import_images: bool,
+    import_volumes: bool,
+    import_containers: bool,
+) -> CommandResult {
+    use std::path::PathBuf;
+
+    let inp = PathBuf::from(&input_dir);
+    let manifest_path = inp.join("manifest.json");
+
+    // Read manifest
+    let manifest_str = match std::fs::read_to_string(&manifest_path) {
+        Ok(s) => s,
+        Err(e) => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to read manifest.json: {e}"),
+            };
+        }
+    };
+
+    let manifest: serde_json::Value = match serde_json::from_str(&manifest_str) {
+        Ok(v) => v,
+        Err(e) => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to parse manifest.json: {e}"),
+            };
+        }
+    };
+
+    let mut imported_images = 0;
+    let mut imported_volumes = 0;
+    let mut imported_containers = 0;
+    let mut errors = Vec::new();
+
+    // Import images
+    if import_images {
+        if let Some(imgs) = manifest.get("images").and_then(|v| v.as_array()) {
+            for img in imgs {
+                let file = img.get("file").and_then(|v| v.as_str()).unwrap_or("");
+                let tar_path = inp.join(file);
+
+                if !tar_path.exists() {
+                    errors.push(format!("Image tar not found: {file}"));
+                    continue;
+                }
+
+                let tar_str = tar_path.to_string_lossy().to_string();
+                let result = run_container_cmd_async(vec![
+                    "image".into(), "load".into(), "-i".into(), tar_str
+                ]).await;
+
+                if result.success {
+                    imported_images += 1;
+                } else {
+                    errors.push(format!("Failed to import image: {}", result.stderr));
+                }
+            }
+        }
+    }
+
+    // Import volumes
+    if import_volumes {
+        if let Some(vols) = manifest.get("volumes").and_then(|v| v.as_array()) {
+            for vol in vols {
+                let name = vol.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let file = vol.get("file").and_then(|v| v.as_str()).unwrap_or("");
+                let tar_path = inp.join(file);
+
+                if !tar_path.exists() {
+                    errors.push(format!("Volume tar not found: {file}"));
+                    continue;
+                }
+
+                // Create volume
+                let create = run_container_cmd_async(vec![
+                    "volume".into(), "create".into(), name.to_string()
+                ]).await;
+
+                if !create.success {
+                    errors.push(format!("Failed to create volume {name}: {}", create.stderr));
+                    continue;
+                }
+
+                // Get mountpoint
+                let inspect = run_container_cmd_async(vec![
+                    "volume".into(), "inspect".into(), name.to_string()
+                ]).await;
+
+                let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+                let mountpoint = match parsed {
+                    Ok(arr) if !arr.is_empty() => {
+                        arr[0].get("configuration")
+                            .and_then(|c| c.get("source"))
+                            .and_then(|v| v.as_str())
+                            .or_else(|| arr[0].get("Mountpoint").and_then(|v| v.as_str()))
+                            .unwrap_or("")
+                            .to_string()
+                    }
+                    _ => {
+                        errors.push(format!("Could not determine mountpoint for volume {name}"));
+                        continue;
+                    }
+                };
+
+                // Extract tar
+                let tar_str = tar_path.to_string_lossy().to_string();
+                let mountpoint_clone = mountpoint.clone();
+                let extract_result = tokio::task::spawn_blocking(move || {
+                    std::process::Command::new("tar")
+                        .args(["-xf", &tar_str, "-C", &mountpoint_clone])
+                        .output()
+                })
+                .await;
+
+                match extract_result {
+                    Ok(Ok(output)) if output.status.success() => {
+                        imported_volumes += 1;
+                    }
+                    _ => {
+                        errors.push(format!("Failed to extract volume {name}"));
+                    }
+                }
+            }
+        }
+    }
+
+    // Import containers
+    if import_containers {
+        if let Some(containers) = manifest.get("containers").and_then(|v| v.as_array()) {
+            for container in containers {
+                let name = container.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let config_file = container.get("config_file").and_then(|v| v.as_str()).unwrap_or("");
+
+                // Read container config
+                let config_path = inp.join(config_file);
+                if !config_path.exists() {
+                    errors.push(format!("Container config not found: {config_file}"));
+                    continue;
+                }
+
+                let config_str = match std::fs::read_to_string(&config_path) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        errors.push(format!("Failed to read container config {config_file}: {e}"));
+                        continue;
+                    }
+                };
+
+                let config: serde_json::Value = match serde_json::from_str(&config_str) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        errors.push(format!("Failed to parse container config {config_file}: {e}"));
+                        continue;
+                    }
+                };
+
+                // Extract container creation parameters from config
+                let image_ref = config.get("configuration")
+                    .and_then(|c| c.get("image"))
+                    .and_then(|i| i.get("reference"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if image_ref.is_empty() {
+                    errors.push(format!("No image reference in container config for {name}"));
+                    continue;
+                }
+
+                // Build create command args
+                let mut args: Vec<String> = vec!["create".into(), "--name".into(), name.to_string()];
+
+                // Add environment variables
+                if let Some(env) = config.get("configuration")
+                    .and_then(|c| c.get("initProcess"))
+                    .and_then(|p| p.get("environment")) {
+                    if let Some(env_arr) = env.as_array() {
+                        for e in env_arr {
+                            if let Some(s) = e.as_str() {
+                                args.push("-e".into());
+                                args.push(s.to_string());
+                            }
+                        }
+                    }
+                }
+
+                // Add port mappings
+                if let Some(ports) = config.get("configuration")
+                    .and_then(|c| c.get("publishedPorts")) {
+                    if let Some(ports_arr) = ports.as_array() {
+                        for port in ports_arr {
+                            if let (Some(host), Some(container)) = (
+                                port.get("hostPort").and_then(|v| v.as_u64()),
+                                port.get("containerPort").and_then(|v| v.as_u64())
+                            ) {
+                                args.push("-p".into());
+                                args.push(format!("{}:{}", host, container));
+                            }
+                        }
+                    }
+                }
+
+                // Add volume mounts
+                if let Some(mounts) = config.get("configuration")
+                    .and_then(|c| c.get("mounts")) {
+                    if let Some(mounts_arr) = mounts.as_array() {
+                        for mount in mounts_arr {
+                            if let Some(source) = mount.get("source").and_then(|v| v.as_str()) {
+                                if let Some(destination) = mount.get("destination").and_then(|v| v.as_str()) {
+                                    args.push("-v".into());
+                                    args.push(format!("{}:{}", source, destination));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Add resource limits
+                if let Some(resources) = config.get("configuration")
+                    .and_then(|c| c.get("resources")) {
+                    if let Some(cpus) = resources.get("cpus").and_then(|v| v.as_f64()) {
+                        args.push("-c".into());
+                        args.push(cpus.to_string());
+                    }
+                    if let Some(memory) = resources.get("memoryInBytes").and_then(|v| v.as_u64()) {
+                        args.push("-m".into());
+                        args.push(format!("{}b", memory));
+                    }
+                }
+
+                // Add image
+                args.push(image_ref.to_string());
+
+                // Create container
+                let create_result = run_container_cmd_async(args).await;
+                if !create_result.success {
+                    errors.push(format!("Failed to create container {name}: {}", create_result.stderr));
+                    continue;
+                }
+
+                // Import filesystem if available
+                let fs_file = container.get("filesystem_file").and_then(|v| v.as_str()).unwrap_or("");
+                let fs_tar_path = inp.join(fs_file);
+                if fs_tar_path.exists() {
+                    // Use container import to restore filesystem
+                    let fs_tar_str = fs_tar_path.to_string_lossy().to_string();
+                    let import_result = run_container_cmd_async(vec![
+                        "import".into(), fs_tar_str, name.to_string()
+                    ]).await;
+
+                    if !import_result.success {
+                        errors.push(format!("Failed to import filesystem for container {name}: {}", import_result.stderr));
+                    }
+                }
+
+                imported_containers += 1;
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        CommandResult {
+            success: true,
+            stdout: format!("Imported {imported_images} images, {imported_volumes} volumes, {imported_containers} containers"),
+            stderr: String::new(),
+        }
+    } else {
+        CommandResult {
+            success: imported_images > 0 || imported_volumes > 0 || imported_containers > 0,
+            stdout: format!("Imported {imported_images} images, {imported_volumes} volumes, {imported_containers} containers"),
+            stderr: errors.join("\n"),
+        }
+    }
+}
+
+// ==================== Docker Import ====================
+
+fn run_docker_cmd(args: Vec<String>) -> CommandResult {
+    let path = "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:/opt/homebrew/sbin";
+    let cmd_str = args.join(" ");
+    log_to_file(&format!("Running: docker {cmd_str}"));
+
+    let output = std::process::Command::new("docker")
+        .args(&args)
+        .env("PATH", path)
+        .env_remove("DOCKER_HOST")
+        .output();
+
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            log_to_file(&format!("docker {} => ok={}, out={}b, err={}", cmd_str, output.status.success(), stdout.len(), stderr));
+            CommandResult {
+                success: output.status.success(),
+                stdout,
+                stderr,
+            }
+        }
+        Err(e) => {
+            log_to_file(&format!("docker {} => ERR: {e}", cmd_str));
+            CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: format!("Failed to execute docker: {e}"),
+            }
+        }
+    }
+}
+
+async fn run_docker_cmd_async(args: Vec<String>) -> CommandResult {
+    tokio::task::spawn_blocking(move || run_docker_cmd(args))
+        .await
+        .unwrap_or_else(|e| CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Task failed: {e}"),
+        })
+}
+
+#[tauri::command]
+async fn docker_list_all() -> CommandResult {
+    log_to_file("docker_list_all: starting");
+
+    let img_result = run_docker_cmd_async(vec![
+        "images".into(), "--format".into(), "json".into()
+    ]).await;
+
+    let vol_result = run_docker_cmd_async(vec![
+        "volume".into(), "ls".into(), "--format".into(), "json".into()
+    ]).await;
+
+    let ctr_result = run_docker_cmd_async(vec![
+        "ps".into(), "-a".into(), "--format".into(), "json".into()
+    ]).await;
+
+    log_to_file(&format!("docker_list_all: img_ok={}, vol_ok={}, ctr_ok={}",
+        img_result.success, vol_result.success, ctr_result.success));
+
+    // Parse images
+    let mut images = Vec::new();
+    if img_result.success {
+        for line in img_result.stdout.lines() {
+            if line.trim().is_empty() { continue; }
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let repo = obj.get("Repository").and_then(|v| v.as_str()).unwrap_or("");
+                let tag = obj.get("Tag").and_then(|v| v.as_str()).unwrap_or("latest");
+                let size = obj.get("Size").and_then(|v| v.as_str()).unwrap_or("");
+                let id = obj.get("ID").and_then(|v| v.as_str()).unwrap_or("");
+                if !repo.is_empty() && repo != "<none>" {
+                    images.push(serde_json::json!({
+                        "Repository": repo, "Tag": tag, "Size": size, "ID": id,
+                    }));
+                }
+            }
+        }
+    }
+    log_to_file(&format!("docker_list_all: parsed {} images", images.len()));
+
+    // Parse volumes
+    let mut volumes = Vec::new();
+    if vol_result.success {
+        // Get volume sizes from docker system df -v
+        let df_result = run_docker_cmd_async(vec![
+            "system".into(), "df".into(), "-v".into()
+        ]).await;
+
+        let mut volume_sizes: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        if df_result.success {
+            let mut in_volume_section = false;
+            for line in df_result.stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("VOLUME NAME") {
+                    in_volume_section = true;
+                    continue;
+                }
+                if in_volume_section && !trimmed.is_empty() {
+                    // Format: "name    links    size"
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    if parts.len() >= 3 {
+                        let name = parts[0].to_string();
+                        let size = parts[2].to_string();
+                        volume_sizes.insert(name, size);
+                    }
+                }
+                if in_volume_section && trimmed.is_empty() && !volume_sizes.is_empty() {
+                    break;
+                }
+            }
+        }
+
+        for line in vol_result.stdout.lines() {
+            if line.trim().is_empty() { continue; }
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let name = obj.get("Name").and_then(|v| v.as_str()).unwrap_or("");
+                let driver = obj.get("Driver").and_then(|v| v.as_str()).unwrap_or("local");
+                if !name.is_empty() {
+                    let size = volume_sizes.get(name).cloned().unwrap_or_default();
+                    volumes.push(serde_json::json!({
+                        "Name": name, "Driver": driver, "Size": size,
+                    }));
+                }
+            }
+        }
+    }
+    log_to_file(&format!("docker_list_all: parsed {} volumes", volumes.len()));
+
+    // Parse containers
+    let mut containers = Vec::new();
+    let mut volume_usage: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    if ctr_result.success {
+        for line in ctr_result.stdout.lines() {
+            if line.trim().is_empty() { continue; }
+            if let Ok(obj) = serde_json::from_str::<serde_json::Value>(line) {
+                let id = obj.get("ID").and_then(|v| v.as_str()).unwrap_or("");
+                let names = obj.get("Names").and_then(|v| v.as_str()).unwrap_or("");
+                // Extract volume mounts from Mounts field
+                let mut mounts = Vec::new();
+                if let Some(mounts_str) = obj.get("Mounts").and_then(|v| v.as_str()) {
+                    for mount in mounts_str.split(",") {
+                        let mount = mount.trim();
+                        if mount.is_empty() { continue; }
+                        // Mount format: "volume_name:/container_path" or "source:/container_path:ro"
+                        if let Some(parts) = mount.split(':').next() {
+                            let vol_name = parts.trim().to_string();
+                            if !vol_name.is_empty() && !vol_name.starts_with('/') {
+                                mounts.push(vol_name.clone());
+                                volume_usage.entry(vol_name).or_default().push(names.trim_start_matches('/').to_string());
+                            }
+                        }
+                    }
+                }
+                containers.push(serde_json::json!({
+                    "ID": id,
+                    "Image": obj.get("Image").and_then(|v| v.as_str()).unwrap_or(""),
+                    "Names": names,
+                    "State": obj.get("State").and_then(|v| v.as_str()).unwrap_or(""),
+                    "Status": obj.get("Status").and_then(|v| v.as_str()).unwrap_or(""),
+                    "Mounts": mounts,
+                }));
+            }
+        }
+    }
+    log_to_file(&format!("docker_list_all: parsed {} containers", containers.len()));
+
+    let combined = serde_json::json!({
+        "images": images,
+        "volumes": volumes,
+        "containers": containers,
+        "volumeUsage": volume_usage,
+        "dockerAvailable": img_result.success || vol_result.success || ctr_result.success,
+    });
+
+    CommandResult {
+        success: true,
+        stdout: serde_json::to_string(&combined).unwrap_or_default(),
+        stderr: String::new(),
+    }
+}
+
+#[tauri::command]
+async fn import_docker_image(reference: String) -> CommandResult {
+    // Check if docker is available
+    let check = run_docker_cmd_async(vec!["--version".into()]).await;
+    if !check.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Docker is not installed or not in PATH".to_string(),
+        };
+    }
+
+    // Save Docker image to temp file
+    let temp_dir = std::env::temp_dir();
+    let safe_name = reference.replace('/', "_").replace(':', "_");
+    let tar_path = temp_dir.join(format!("docker_img_{safe_name}.tar"));
+    let tar_str = tar_path.to_string_lossy().to_string();
+
+    log_to_file(&format!("Saving Docker image {reference} to {tar_str}"));
+    let save_result = run_docker_cmd_async(vec![
+        "save".into(), "-o".into(), tar_str.clone(), reference.clone()
+    ]).await;
+
+    if !save_result.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to save Docker image: {}", save_result.stderr),
+        };
+    }
+
+    // Load into Apple Container
+    log_to_file(&format!("Loading image into Apple Container"));
+    let load_result = run_container_cmd_async(vec![
+        "image".into(), "load".into(), "-i".into(), tar_str.clone()
+    ]).await;
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(&tar_path);
+
+    if load_result.success {
+        CommandResult {
+            success: true,
+            stdout: format!("Image '{reference}' imported from Docker to Apple Container"),
+            stderr: String::new(),
+        }
+    } else {
+        CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to load into Apple Container: {}", load_result.stderr),
+        }
+    }
+}
+
+#[tauri::command]
+async fn import_docker_volume(name: String) -> CommandResult {
+    // Check if docker is available
+    let check = run_docker_cmd_async(vec!["--version".into()]).await;
+    if !check.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Docker is not installed or not in PATH".to_string(),
+        };
+    }
+
+    // Create a temporary container to access the volume data
+    let temp_container = format!("__migration_{name}");
+    log_to_file(&format!("Creating temp container for volume {name}"));
+
+    // Find a busybox image to use
+    let busybox_check = run_docker_cmd_async(vec!["image".into(), "inspect".into(), "busybox:latest".into()]).await;
+    let busybox_image = if busybox_check.success {
+        "busybox:latest"
+    } else {
+        // Try to pull busybox
+        let pull = run_docker_cmd_async(vec!["pull".into(), "busybox:latest".into()]).await;
+        if pull.success {
+            "busybox:latest"
+        } else {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Failed to find or pull busybox image for volume export".to_string(),
+            };
+        }
+    };
+
+    // Create temp container with the Docker volume
+    let create_result = run_docker_cmd_async(vec![
+        "create".into(),
+        "--name".into(), temp_container.clone(),
+        "-v".into(), format!("{name}:/data:ro"),
+        busybox_image.into(),
+        "true".into(),
+    ]).await;
+
+    if !create_result.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to create temp container: {}", create_result.stderr),
+        };
+    }
+
+    // Export the volume data
+    let temp_dir = std::env::temp_dir();
+    let tar_path = temp_dir.join(format!("docker_vol_{name}.tar"));
+    let tar_str = tar_path.to_string_lossy().to_string();
+
+    log_to_file(&format!("Exporting Docker volume {name}"));
+    let export_result = run_docker_cmd_async(vec![
+        "cp".into(),
+        format!("{temp_container}:/data/."),
+        tar_str.clone(),
+    ]).await;
+
+    // Remove temp container
+    let _ = run_docker_cmd_async(vec!["rm".into(), "-f".into(), temp_container.clone()]).await;
+
+    if !export_result.success {
+        let _ = std::fs::remove_file(&tar_path);
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to export Docker volume: {}", export_result.stderr),
+        };
+    }
+
+    // Create Apple Container volume and import data
+    let create_vol = run_container_cmd_async(vec![
+        "volume".into(), "create".into(), name.clone()
+    ]).await;
+
+    if !create_vol.success {
+        let _ = std::fs::remove_file(&tar_path);
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to create Apple Container volume: {}", create_vol.stderr),
+        };
+    }
+
+    // Get the mountpoint
+    let inspect = run_container_cmd_async(vec![
+        "volume".into(), "inspect".into(), name.clone()
+    ]).await;
+
+    let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+    let mountpoint = match parsed {
+        Ok(arr) if !arr.is_empty() => {
+            arr[0].get("configuration")
+                .and_then(|c| c.get("source"))
+                .and_then(|v| v.as_str())
+                .or_else(|| arr[0].get("Mountpoint").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .to_string()
+        }
+        _ => {
+            let _ = std::fs::remove_file(&tar_path);
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Could not determine volume mountpoint".to_string(),
+            };
+        }
+    };
+
+    // Extract tar to mountpoint
+    let tar_str_clone = tar_str.clone();
+    let mountpoint_clone = mountpoint.clone();
+    let extract_result = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("tar")
+            .args(["-xf", &tar_str_clone, "-C", &mountpoint_clone])
+            .output()
+    })
+    .await;
+
+    let _ = std::fs::remove_file(&tar_path);
+
+    match extract_result {
+        Ok(Ok(output)) if output.status.success() => {
+            CommandResult {
+                success: true,
+                stdout: format!("Volume '{name}' imported from Docker to Apple Container"),
+                stderr: String::new(),
+            }
+        }
+        _ => {
+            CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Failed to extract volume data".to_string(),
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn import_docker_container(id: String, image: String) -> CommandResult {
+    // Check docker is available
+    let check = run_docker_cmd_async(vec!["--version".into()]).await;
+    if !check.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: "Docker is not installed or not in PATH".to_string(),
+        };
+    }
+
+    // First, import the Docker image into Apple Container
+    let img_import = import_docker_image(image.clone()).await;
+    if !img_import.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to import image: {}", img_import.stderr),
+        };
+    }
+
+    // Get container config from Docker
+    let inspect = run_docker_cmd_async(vec![
+        "inspect".into(), id.clone()
+    ]).await;
+
+    if !inspect.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to inspect Docker container: {}", inspect.stderr),
+        };
+    }
+
+    let parsed: Result<Vec<serde_json::Value>, _> = serde_json::from_str(&inspect.stdout);
+    let config = match parsed {
+        Ok(arr) if !arr.is_empty() => arr[0].clone(),
+        _ => {
+            return CommandResult {
+                success: false,
+                stdout: String::new(),
+                stderr: "Could not parse Docker container config".to_string(),
+            };
+        }
+    };
+
+    // Extract container name
+    let name = config.get("Name").and_then(|v| v.as_str())
+        .unwrap_or(&id).trim_start_matches('/').to_string();
+
+    // Build create command args from Docker config
+    let mut args: Vec<String> = vec!["create".into(), "--name".into(), name.clone()];
+
+    // Environment variables
+    if let Some(env) = config.get("Config").and_then(|c| c.get("Env")).and_then(|e| e.as_array()) {
+        for e in env {
+            if let Some(s) = e.as_str() {
+                args.push("-e".into());
+                args.push(s.to_string());
+            }
+        }
+    }
+
+    // Port mappings from HostConfig
+    if let Some(port_bindings) = config.get("HostConfig").and_then(|h| h.get("PortBindings")) {
+        if let Some(obj) = port_bindings.as_object() {
+            for (container_port, bindings) in obj {
+                if let Some(arr) = bindings.as_array() {
+                    for binding in arr {
+                        if let Some(host_port) = binding.get("HostPort").and_then(|v| v.as_str()) {
+                            args.push("-p".into());
+                            args.push(format!("{}:{}", host_port, container_port.replace("/tcp", "")));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Volume mounts from HostConfig
+    if let Some(binds) = config.get("HostConfig").and_then(|h| h.get("Binds")).and_then(|b| b.as_array()) {
+        for bind in binds {
+            if let Some(s) = bind.as_str() {
+                args.push("-v".into());
+                args.push(s.to_string());
+            }
+        }
+    }
+
+    // Working directory
+    if let Some(wd) = config.get("Config").and_then(|c| c.get("WorkingDir")).and_then(|v| v.as_str()) {
+        if !wd.is_empty() {
+            args.push("-w".into());
+            args.push(wd.to_string());
+        }
+    }
+
+    // Add image
+    args.push(image.clone());
+
+    // Create container
+    let create_result = run_container_cmd_async(args).await;
+    if !create_result.success {
+        return CommandResult {
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Failed to create container: {}", create_result.stderr),
+        };
+    }
+
+    CommandResult {
+        success: true,
+        stdout: format!("Container '{name}' imported from Docker"),
+        stderr: String::new(),
+    }
+}
+
 // ==================== Docker Socket Path ====================
 
 #[tauri::command]
@@ -2271,6 +3401,7 @@ pub fn run() {
     ensure_container_system_running();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             system_start,
             system_stop,
@@ -2345,6 +3476,14 @@ pub fn run() {
             start_socktainer,
             stop_socktainer,
             get_socktainer_socket_path,
+            export_volume,
+            import_volume,
+            export_migration,
+            import_migration,
+            docker_list_all,
+            import_docker_image,
+            import_docker_volume,
+            import_docker_container,
         ])
         .setup(|app| {
             log_to_file("Tauri setup called");

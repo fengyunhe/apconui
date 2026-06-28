@@ -1,4 +1,4 @@
-export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings";
+export type Tab = "containers" | "images" | "volumes" | "networks" | "machines" | "terminal" | "settings" | "migration";
 
 export interface RawContainer {
   configuration: {
@@ -135,4 +135,20 @@ export interface PullTask {
   };
   error?: string;
   startTime: number;
+}
+
+// ===== Migration Types =====
+export interface MigrationManifest {
+  version: string;
+  created: string;
+  images: Array<{ name: string; file: string; size: number }>;
+  volumes: Array<{ name: string; file: string; size: number }>;
+  containers: Array<{ id: string; name: string; config_file: string; config_size: number; filesystem_file: string; filesystem_size: number }>;
+}
+
+export interface MigrationProgress {
+  phase: "exporting" | "importing" | "idle";
+  current: string;
+  completed: number;
+  total: number;
 }
